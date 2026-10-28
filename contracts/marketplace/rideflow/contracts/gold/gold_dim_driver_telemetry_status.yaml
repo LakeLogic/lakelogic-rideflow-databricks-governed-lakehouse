@@ -3,7 +3,13 @@ version: 1.0.0
 info:
   title: Gold — Dim Driver Telemetry Status
   target_layer: gold
-  description: 'grain: one row per status'
+  description: Driver telemetry status records show, for each driver, whether their
+    telemetry feed is currently active, inactive or otherwise reporting, so teams
+    can see at a glance how each driver is reporting. Each record carries a surrogate
+    identifier used to link the status to related data elsewhere, with a placeholder
+    value marking records whose true identity is unknown. Records also note the source
+    system they originated from, supporting traceability back to where the status
+    came from.
   table_name: '{gold_layer}_dim_driver_telemetry_status'
   system: rideflow
   domain: marketplace
@@ -18,8 +24,9 @@ model:
   - name: status
     type: string
     required: true
-    description: Dimension attribute 'status', projected from the 'driver_telemetry_status'
-      entity.
+    description: The current status of the driver telemetry feed, showing whether
+      a driver's telemetry is active, inactive or otherwise, so teams can see at a
+      glance how each driver is reporting.
   - name: system
     type: string
     required: true
@@ -40,7 +47,6 @@ quality:
       description: No two rows share the same status.
 
 materialization:
-  strategy: merge
   scd1:
     surrogate_key: status_sk
     surrogate_key_strategy: hash
@@ -51,9 +57,13 @@ materialization:
 transformations:
 - phase: pre
   sql: |-
-    SELECT DISTINCT status, 'rideflow' AS system
+    SELECT DISTINCT status
     FROM source
     WHERE status IS NOT NULL
+- phase: pre
+  derive:
+    field: system
+    sql: '''rideflow'''
 
 source:
   type: table
@@ -62,4 +72,4 @@ source:
   watermark_field: _lakelogic_processed_at
 
 metadata:
-  run_log_table: '{domain_catalog}._lakelogic_run_log'
+  run_log_table: '{domain_catalog}.lakelogic_run_log'

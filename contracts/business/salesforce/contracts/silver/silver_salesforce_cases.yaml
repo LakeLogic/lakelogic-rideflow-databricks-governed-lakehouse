@@ -1,0 +1,114 @@
+version: 1.0.0
+
+info:
+  title: Silver — Salesforce Cases
+  target_layer: silver
+  table_name: '{silver_layer}_salesforce_cases'
+  system: salesforce
+  domain: business
+
+model:
+  fields:
+  - name: attributes
+    type: json
+    required: false
+    description: Column 'attributes' projected from source table 'salesforce_cases',
+      typed as json.
+  - name: Id
+    type: string
+    required: true
+    description: Business key 'Id' (from source table 'salesforce_cases'), typed as
+      string.
+  - name: AccountId
+    type: string
+    required: false
+    description: Column 'AccountId' projected from source table 'salesforce_cases',
+      typed as string.
+  - name: ContactId
+    type: string
+    required: false
+    description: Column 'ContactId' projected from source table 'salesforce_cases',
+      typed as string.
+  - name: CaseNumber
+    type: string
+    required: false
+    description: Column 'CaseNumber' projected from source table 'salesforce_cases',
+      typed as string.
+  - name: Subject
+    type: string
+    required: false
+    description: Column 'Subject' projected from source table 'salesforce_cases',
+      typed as string.
+  - name: Status
+    type: string
+    required: true
+    description: Column 'Status' projected from source table 'salesforce_cases', typed
+      as string.
+  - name: Priority
+    type: string
+    required: false
+    description: Column 'Priority' projected from source table 'salesforce_cases',
+      typed as string.
+  - name: Origin
+    type: string
+    required: false
+    description: Column 'Origin' projected from source table 'salesforce_cases', typed
+      as string.
+  - name: CreatedDate
+    type: timestamp
+    required: false
+    description: Column 'CreatedDate' projected from source table 'salesforce_cases',
+      typed as timestamp.
+  - name: LastModifiedDate
+    type: timestamp
+    required: false
+    description: Column 'LastModifiedDate' projected from source table 'salesforce_cases',
+      typed as timestamp.
+  - name: SystemModstamp
+    type: timestamp
+    required: false
+    description: Column 'SystemModstamp' projected from source table 'salesforce_cases',
+      typed as timestamp.
+  - name: ClosedDate
+    type: date
+    required: false
+    description: Column 'ClosedDate' projected from source table 'salesforce_cases',
+      typed as date.
+  - name: IsDeleted
+    type: boolean
+    required: false
+    description: Column 'IsDeleted' projected from source table 'salesforce_cases',
+      typed as boolean.
+
+primary_key:
+- Id
+
+quality:
+  row_rules:
+  - name: Id_not_null
+    sql: Id IS NOT NULL
+    category: completeness
+    description: id is always present (never null).
+  - name: Status_not_null
+    sql: Status IS NOT NULL
+    category: completeness
+    description: status is always present (never null).
+
+transformations:
+- deduplicate:
+    by:
+    - Id
+    sort_by:
+    - LastModifiedDate
+    order: desc
+
+dataset: silver_salesforce_cases
+
+source:
+  type: table
+  path: table:{bronze_root}.{bronze_layer}_salesforce_cases
+  load_mode: incremental
+  watermark_field: _lakelogic_processed_at
+
+metadata:
+  run_log_table: '{domain_catalog}.lakelogic_run_log'

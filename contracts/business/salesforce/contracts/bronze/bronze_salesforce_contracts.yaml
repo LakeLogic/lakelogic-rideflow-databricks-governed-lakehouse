@@ -1,0 +1,80 @@
+version: 1.0.0
+
+info:
+  title: Bronze — Salesforce Contracts
+  target_layer: bronze
+  table_name: '{bronze_layer}_salesforce_contracts'
+  domain: business
+  system: salesforce
+
+model:
+  fields:
+  - name: attributes
+    type: json
+    description: Observed json column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_contracts.
+  - name: Id
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_contracts.
+  - name: AccountId
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_contracts.
+  - name: ContractNumber
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_contracts.
+  - name: Status
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_contracts.
+  - name: StartDate
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_contracts.
+  - name: ContractTerm
+    type: Int64
+    description: Observed Int64 column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_contracts.
+  - name: EndDate
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_contracts.
+  - name: RideFlow_Monthly_Commit__c
+    type: Float64
+    description: Observed Float64 column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_contracts.
+  - name: CreatedDate
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_contracts.
+  - name: LastModifiedDate
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_contracts.
+  - name: SystemModstamp
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_contracts.
+  - name: IsDeleted
+    type: boolean
+    description: Observed boolean column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_contracts.
+
+source:
+  type: landing
+  path: '{landing_root}/contracts'
+  format: json
+  partition:
+    format: y_%Y/m_%m/d_%d
+  load_mode: incremental
+  watermark_strategy: pipeline_log
+
+primary_key:
+- Id
+
+metadata:
+  run_log_table: '{domain_catalog}.lakelogic_run_log'
+
+dataset: bronze_salesforce_contracts

@@ -1,0 +1,76 @@
+version: 1.0.0
+
+info:
+  title: Silver — Onboarding Driving Licences
+  target_layer: silver
+  table_name: '{silver_layer}_onboarding_driving_licences'
+  system: onboarding
+  domain: operations
+
+model:
+  fields:
+  - name: file_path
+    type: string
+    required: false
+    description: Column 'file_path' projected from source table 'onboarding_driving_licences',
+      typed as string.
+  - name: licence_no
+    type: string
+    required: false
+    pii: true
+    classification: licence_id
+    description: Column 'licence_no' projected from source table 'onboarding_driving_licences',
+      typed as string. Personal data (licence_id), not masked.
+  - name: driver_id
+    type: string
+    required: true
+    description: Column 'driver_id' projected from source table 'onboarding_driving_licences',
+      typed as string.
+  - name: holder_name
+    type: string
+    required: false
+    description: Column 'holder_name' projected from source table 'onboarding_driving_licences',
+      typed as string.
+  - name: date_of_birth
+    type: string
+    required: false
+    pii: true
+    classification: date_of_birth
+    description: Column 'date_of_birth' projected from source table 'onboarding_driving_licences',
+      typed as string. Personal data (date_of_birth), not masked.
+  - name: expiry_date
+    type: date
+    required: false
+    description: Column 'expiry_date' projected from source table 'onboarding_driving_licences',
+      typed as date.
+  - name: licence_class
+    type: string
+    required: false
+    description: Column 'licence_class' projected from source table 'onboarding_driving_licences',
+      typed as string.
+  - name: issuing_city
+    type: string
+    required: false
+    description: Column 'issuing_city' projected from source table 'onboarding_driving_licences',
+      typed as string.
+
+materialization:
+  strategy: overwrite
+
+quality:
+  row_rules:
+  - name: driver_id_not_null
+    sql: driver_id IS NOT NULL
+    category: completeness
+    description: driver_id is always present (never null).
+
+dataset: silver_onboarding_driving_licences
+
+source:
+  type: table
+  path: table:{bronze_root}.{bronze_layer}_onboarding_driving_licences
+  load_mode: incremental
+  watermark_field: _lakelogic_processed_at
+
+metadata:
+  run_log_table: '{domain_catalog}.lakelogic_run_log'

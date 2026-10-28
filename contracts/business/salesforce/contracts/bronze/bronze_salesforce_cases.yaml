@@ -1,0 +1,84 @@
+version: 1.0.0
+
+info:
+  title: Bronze — Salesforce Cases
+  target_layer: bronze
+  table_name: '{bronze_layer}_salesforce_cases'
+  domain: business
+  system: salesforce
+
+model:
+  fields:
+  - name: attributes
+    type: json
+    description: Observed json column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_cases.
+  - name: Id
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_cases.
+  - name: AccountId
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_cases.
+  - name: ContactId
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_cases.
+  - name: CaseNumber
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_cases.
+  - name: Subject
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_cases.
+  - name: Status
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_cases.
+  - name: Priority
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_cases.
+  - name: Origin
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_cases.
+  - name: CreatedDate
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_cases.
+  - name: LastModifiedDate
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_cases.
+  - name: SystemModstamp
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_cases.
+  - name: ClosedDate
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_cases.
+  - name: IsDeleted
+    type: boolean
+    description: Observed boolean column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_cases.
+
+source:
+  type: landing
+  path: '{landing_root}/cases'
+  format: json
+  partition:
+    format: y_%Y/m_%m/d_%d
+  load_mode: incremental
+  watermark_strategy: pipeline_log
+
+primary_key:
+- Id
+
+metadata:
+  run_log_table: '{domain_catalog}.lakelogic_run_log'
+
+dataset: bronze_salesforce_cases

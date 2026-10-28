@@ -1,71 +1,72 @@
 version: 1.0.0
 
 info:
-  title: "Bronze — Checkr Driver Licences Unstructured"
-  table_name: "{bronze_layer}_{system}_driver_licences"
-  description: "Extracting driver details from simulated raw PDF documents using pdfplumber regex."
+  title: Bronze — Checkr Driver Licences
   target_layer: bronze
+  description: Driver licence records extracted from source documents held by Checkr,
+    capturing the issuing authority and jurisdiction, the holder's name, licence number
+    and date of birth, the licence expiry date, and the vehicle classes the holder
+    is permitted to drive. Each row is traceable back to the original file it was
+    extracted from. The licence number and date of birth are personal data used to
+    match and confirm a driver's identity.
+  table_name: '{bronze_layer}_checkr_driver_licences'
   domain: operations
   system: checkr
 
-dataset: "driver_licences"
+model:
+  fields:
+  - name: file_path
+    type: string
+    description: The document this row was extracted from.
+  - name: holder_name
+    type: string
+    extraction_task: metadata
+    extraction_examples:
+    - Name:\s*([A-Z][a-z]+\s+[A-Z][a-z]+)
+    description: Full name of the licence holder.
+  - name: licence_number
+    type: string
+    extraction_task: metadata
+    extraction_examples:
+    - Licence\s*No:\s*([A-Z]{2}-\d{8})
+    description: Driver licence number in the form two uppercase letters, hyphen,
+      eight digits.
+    pii: true
+    classification: licence_id
+  - name: date_of_birth
+    type: date
+    extraction_task: metadata
+    extraction_examples:
+    - DOB:\s*(\d{4}-\d{2}-\d{2})
+    description: Holder's date of birth in ISO format.
+    pii: true
+    classification: date_of_birth
+  - name: expiry_date
+    type: date
+    extraction_task: metadata
+    extraction_examples:
+    - EXP:\s*(\d{4}-\d{2}-\d{2})
+    description: Licence expiry date in ISO format.
+  - name: vehicle_classes
+    type: string
+    extraction_task: metadata
+    extraction_examples:
+    - Classes:\s*([^\n]+)
+    description: Comma-separated list of vehicle classes the holder is licensed for.
 
 source:
   type: landing
-  # Use the registry's landing_root convention so dev/prod paths resolve too.
-  # Glob into all date-partitioned hour folders for PDFs.
-  path: "{landing_root}/driver_licences/**/*.pdf"
+  path: '{landing_root}/driver_licences/**/*.pdf'
   format: pdf
-  # Incremental: the engine filters the matched PDFs by file mtime against the
-  # last successful run's max_source_mtime (pipeline_log) BEFORE extraction, so
-  # only new/rewritten PDFs are sent through pdfplumber. The test-data generator
-  # writes fresh files (current mtime), so regenerated PDFs are picked up. If a
-  # run ever reports `no_new_data` while PDFs exist (e.g. files copied with
-  # preserved older mtimes), re-run with reprocess to bypass the watermark.
-  # Re-extracted licences upsert in silver (merge on licence_number).
+  partition:
+    format: y_%Y/m_%m/d_%d
   load_mode: incremental
   watermark_strategy: pipeline_log
 
+metadata:
+  run_log_table: '{domain_catalog}.lakelogic_run_log'
+
+dataset: bronze_checkr_driver_licences
+
 extraction:
-  provider: pdfplumber
-  # Extraction hints live on model.fields below (extraction_task / extraction_examples).
-  # As of lakelogic 1.36.0 the engine mirrors model.fields → extraction.output_schema on
-  # ALL read paths (incl. spark/UC), so no explicit output_schema is needed here.
-
-model:
-  fields:
-    - name: file_path
-      type: string
-      # implicitly populated by the pipeline
-
-    - name: full_name
-      type: string
-      extraction_task: metadata
-      extraction_examples: ['Name:\s+(.+)']
-      
-    - name: licence_number
-      type: string
-      extraction_task: metadata
-      extraction_examples: ['Licence No:\s+(\S+)']
-      
-    - name: date_of_birth
-      type: date
-      extraction_task: metadata
-      extraction_examples: ['DOB:\s+(\d{4}-\d{2}-\d{2})']
-      
-    - name: expiry_date
-      type: date
-      extraction_task: metadata
-      extraction_examples: ['EXP:\s+(\d{4}-\d{2}-\d{2})']
-      
-    - name: vehicle_classes
-      type: string
-      extraction_task: metadata
-      extraction_examples: ['Classes:\s+(.+)']
-
-quality:
-  row_rules:
-    - not_null: licence_number
-
-lineage:
-  enabled: true
+  provider: document
