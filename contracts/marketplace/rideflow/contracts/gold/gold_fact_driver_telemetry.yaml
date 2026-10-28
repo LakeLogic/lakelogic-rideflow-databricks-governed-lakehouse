@@ -3,7 +3,14 @@ version: 1.0.0
 info:
   title: Gold — Fact Driver Telemetry
   target_layer: gold
-  description: 'grain: one row per driver telemetry reading'
+  description: Individual location pings from RideFlow drivers, each carrying the
+    driver's speed in kilometres per hour, their current state such as available,
+    on-trip or offline, and the trip they were on when the reading was taken. Readings
+    are stamped with the date and time recorded and tagged to a city code for regional
+    reporting, with internal references linking each ping back to the driver's profile
+    and status definitions. Records are sourced from the RideFlow system and reconciled
+    against driver profile and status reference data, with unmatched references flagged
+    as -1.
   table_name: '{gold_layer}_fact_driver_telemetry'
   system: rideflow
   domain: marketplace
@@ -13,35 +20,47 @@ model:
   - name: telemetry_id
     type: string
     required: true
-    description: Grain key of the 'driver_telemetry' fact.
+    description: Unique identifier for each driver telemetry reading, used to trace
+      and de-duplicate individual location pings.
   - name: speed_kmh
     type: float
     required: false
-    description: 'Measure candidate: avg of ''speed_kmh'' (needs confirmation).'
-  - name: trip_id
+    description: The driver's speed in kilometres per hour when the reading was taken,
+      useful for trip and safety analysis.
+  - name: status
     type: string
     required: false
-    description: Column 'trip_id' of the 'driver_telemetry' fact.
+    description: The driver's current state at the time of the reading, such as available,
+      on-trip, or offline.
   - name: timestamp
     type: timestamp
     required: false
-    description: Column 'timestamp' of the 'driver_telemetry' fact.
-  - name: heading
-    type: string
-    required: false
-    description: Column 'heading' of the 'driver_telemetry' fact.
-  - name: accuracy_meters
-    type: string
-    required: false
-    description: Column 'accuracy_meters' of the 'driver_telemetry' fact.
+    description: The date and time the telemetry reading was recorded, used to order
+      and analyse driver activity over time.
   - name: driver_sk
     type: string
     required: true
     foreign_key:
-      contract: gold_dim_driver
-      column: driver_sk
-    description: Surrogate key of gold_dim_driver, looked up as
-      of timestamp; '-1' when the dimension does not know the row.
+      contract: gold_dim_driver_profiles
+      column: driver_profiles_sk
+    description: Surrogate key of gold_dim_driver_profiles, looked up as of timestamp;
+      '-1' when the dimension does not know the row.
+  - name: city_sk
+    type: string
+    required: true
+    foreign_key:
+      contract: gold_dim_city_master
+      column: city_master_sk
+    description: Surrogate key of gold_dim_city_master, looked up as of timestamp;
+      '-1' when the dimension does not know the row.
+  - name: status_sk
+    type: string
+    required: true
+    foreign_key:
+      contract: gold_dim_driver_telemetry_status
+      column: status_sk
+    description: Surrogate key of gold_dim_driver_telemetry_status, looked up on its
+      business key; '-1' when the dimension does not know the row.
   - name: timestamp_date
     type: date
     required: false
@@ -71,33 +90,66 @@ quality:
     category: consistency
     description: Rows whose driver_sk fell back to the unknown member — the dimension
       did not know them when this fact ran.
+  - name: city_sk_unknown_member_rows
+    sql: SELECT COUNT(*) FROM {dataset} WHERE city_sk = '-1'
+    must_be_less_than: 1
+    severity: warning
+    category: consistency
+    description: Rows whose city_sk fell back to the unknown member — the dimension
+      did not know them when this fact ran.
+  - name: status_sk_unknown_member_rows
+    sql: SELECT COUNT(*) FROM {dataset} WHERE status_sk = '-1'
+    must_be_less_than: 1
+    severity: warning
+    category: consistency
+    description: Rows whose status_sk fell back to the unknown member — the dimension
+      did not know them when this fact ran.
 
 transformations:
 - phase: pre
   sql: |-
     SELECT
       r.telemetry_id,
-      r.trip_id,
+      r.status,
       r.timestamp,
-      r.heading,
-      r.accuracy_meters,
       r.speed_kmh AS speed_kmh,
-      COALESCE(d1.driver_sk, '-1') AS driver_sk,
-      CAST(r.timestamp AS DATE) AS timestamp_date,
-      'rideflow' AS system
+      COALESCE(d1.driver_profiles_sk, '-1') AS driver_sk,
+      COALESCE(d2.city_master_sk, '-1') AS city_sk,
+      COALESCE(d3.status_sk, '-1') AS status_sk,
+      CAST(r.timestamp AS DATE) AS timestamp_date
     FROM source r
-    LEFT JOIN gold_dim_driver d1
+    LEFT JOIN gold_dim_driver_profiles d1
       ON  r.driver_id = d1.driver_id
       AND r.timestamp >= d1.effective_from
       AND r.timestamp < COALESCE(d1.effective_to, CAST('9999-12-31 00:00:00' AS TIMESTAMP))
+    LEFT JOIN gold_dim_city_master d2
+      ON  r.city_code = d2.city_code
+      AND r.timestamp >= d2.effective_from
+      AND r.timestamp < COALESCE(d2.effective_to, CAST('9999-12-31 00:00:00' AS TIMESTAMP))
+    LEFT JOIN gold_dim_driver_telemetry_status d3
+      ON  r.status = d3.status
+- phase: pre
+  derive:
+    field: system
+    sql: '''rideflow'''
 
 links:
-- name: gold_dim_driver
+- name: gold_dim_driver_profiles
   type: table
-  path: table:{gold_root}.{gold_layer}_dim_driver
+  path: table:{gold_root}.{gold_layer}_dim_driver_profiles
+- name: gold_dim_city_master
+  type: table
+  path: table:`{domain_catalog_prefix}_reference`.{gold_layer}.{gold_layer}_dim_city_master
+- name: gold_dim_driver_telemetry_status
+  type: table
+  path: table:{gold_root}.{gold_layer}_dim_driver_telemetry_status
+
+upstream:
+- gold_dim_city_master
+- gold_dim_driver_profiles
+- gold_dim_driver_telemetry_status
 
 materialization:
-  # Transaction facts are immutable events: the engine requires append for them.
   strategy: append
   fact:
     type: transaction
@@ -111,4 +163,4 @@ source:
   watermark_field: _lakelogic_processed_at
 
 metadata:
-  run_log_table: '{domain_catalog}._lakelogic_run_log'
+  run_log_table: '{domain_catalog}.lakelogic_run_log'

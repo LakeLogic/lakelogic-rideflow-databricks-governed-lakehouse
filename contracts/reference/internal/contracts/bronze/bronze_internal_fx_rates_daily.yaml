@@ -1,13 +1,15 @@
 version: 1.0.0
 
 info:
-  title: "Bronze — Internal FX Rates Daily"
-  table_name: "{bronze_layer}_{system}_fx_rates_daily"
-  description: >
-    Daily foreign-exchange rates pulled from the ECB reference rates API.
-    Used downstream by fact_revenue_daily to normalize multi-currency
-    transactions to USD. One row per (currency × date).
+  title: Bronze — Internal Fx Rates Daily
   target_layer: bronze
+  description: Daily foreign exchange rates, one per currency pair, giving the rate
+    used to convert an amount from a base currency into a quote currency on a given
+    calendar date. Each rate is traced to the upstream feed that supplied it, so the
+    origin of any conversion can be followed back. Every field is nullable, so the
+    completeness of dates, currency pairs and rate values is not guaranteed by the
+    contract.
+  table_name: '{bronze_layer}_internal_fx_rates_daily'
   domain: reference
   system: internal
 
@@ -15,38 +17,31 @@ model:
   fields:
   - name: rate_date
     type: string
-    description: "ISO date (YYYY-MM-DD)"
+    description: The calendar date the exchange rate applies to, used to line up FX
+      rates with the business events they affect.
   - name: base_currency
     type: string
-    description: "Base currency (typically EUR for ECB feed)"
+    description: The currency being converted from in this exchange rate pair.
   - name: quote_currency
     type: string
-    description: "ISO 4217 quote currency code"
+    description: The currency being converted to in this exchange rate pair.
   - name: rate
-    type: float
-    description: "Mid-market rate, base per quote"
+    type: Float64
+    description: The exchange rate value used to convert one unit of the base currency
+      into the quote currency.
   - name: source_feed
     type: string
-    description: "Provider identifier (e.g. ecbreference)"
-  - name: _lakelogic_processed_at
-    type: timestamp
+    description: Identifies which upstream feed supplied this rate, so the origin
+      of each rate can be traced.
 
 source:
   type: landing
-  path: "{landing_root}/fx_rates_daily"
+  path: '{landing_root}/fx_rates_daily'
   format: csv
-  options:
-    engine_options:
-      header: "true"
-      recursiveFileLookup: "true"
-  load_mode: incremental
-  watermark_strategy: pipeline_log
-  # No `partition:` block — the generator writes a single flat seed file
-  # (fx_rates_daily/fx_rates_daily_seed.csv), not date-partitioned folders. A
-  # partition format here would make a full-load scan look in non-existent
-  # y/m/d dirs and find nothing. recursiveFileLookup (above) discovers the file.
 
-lineage:
-  enabled: true
-  capture_timestamp: true
-  timestamp_column_name: _lakelogic_processed_at
+primary_key:
+- rate_date
+- base_currency
+- quote_currency
+
+dataset: bronze_internal_fx_rates_daily

@@ -1,394 +1,513 @@
 # Databricks notebook source
-# ═══════════════════════════════════════════════════════════════════════════════
-# Notebook  : nb_00_setup — Provision the RideFlow demo on Unity Catalog
-# Purpose   : One-shot, idempotent bootstrap so a tester can stand up the whole
-#             demo on Databricks with NO Azure ADLS and NO external storage.
-#
-# Creates, from the contract registry (contracts/):
-#   • the Unity Catalog            (default: rideflow_dev_platform)
-#   • one schema per domain        (marketing, marketplace, operations, ...)
-#   • a `nondelta` schema with UC Volumes:
-#         _contracts               (the staged contract registry the driver reads)
-#         _logs                    (pipeline run logs)
-#         landing_<domain>         (the landing zone — a UC Volume, not ADLS)
-#   • stages every contract YAML into the _contracts Volume
-#
-# After this runs, deploy + run a domain orchestrator to generate and process
-# data. Everything lives inside the one catalog — tear down with a single
-# `DROP CATALOG <catalog> CASCADE`.
-#
-# Idempotent: every statement is IF NOT EXISTS; safe to re-run.
-# ═══════════════════════════════════════════════════════════════════════════════
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## ⚙️ Widgets
-
-# COMMAND ----------
-
-# NOTE: `dbutils.widgets.removeAll()` must NOT be called here. In a job run it destroys
-# the values the task passed in `base_parameters`, and the re-declarations below then hand
-# back their DEFAULTS instead. That is invisible for `catalog` (the default happens to equal
-# what the job passes) but silently disabled `reset`, so the purge never ran and the job
-# failed on the orphaned volume it was meant to rebuild.
-dbutils.widgets.text("catalog", "rideflow_dev_platform", "Config - Unity Catalog name")
-# Where the synced contract registry lives in the workspace. Leave blank to
-# auto-detect relative to this notebook. The bootstrap job passes it explicitly.
-dbutils.widgets.text("contracts_src", "", "Config - Contracts source dir (workspace)")
-dbutils.widgets.text("environment", "dev", "Config - Environment (names each domain catalog)")
-# Purge before provisioning. A Unity Catalog catalog lives in the REGIONAL METASTORE,
-# not the workspace — so deleting a workspace leaves its catalog behind, still listed,
-# with managed storage that this workspace cannot reach. Volumes then "exist" as
-# metadata while `/Volumes/<cat>/...` is unusable, which surfaces as a baffling
-# `OSError: [Errno 22] Invalid argument`. Reset drops that orphan and rebuilds clean.
-dbutils.widgets.dropdown("reset", "false", ["false", "true"],
-                         "Config - DROP the catalog first (destructive)")
-# Where a NEW catalog's managed data lives. Needed when the metastore has no storage
-# root of its own ("Default Storage is enabled in your account") — then plain
-# `CREATE CATALOG` is rejected and the location must be given explicitly. Leave blank
-# on metastores that do have a root. The principal also needs CREATE MANAGED STORAGE
-# on the external location that covers this path.
-dbutils.widgets.text("storage_root", "", "Config - MANAGED LOCATION for a new catalog")
+# MAGIC # 00_setup — provision the mesh in Unity Catalog
+# MAGIC
+# MAGIC Creates every catalog, schema and Volume the <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">_system.yaml</span> registries declare, and their
+# MAGIC landing/log folders. With one catalog that is a schema per domain; with a catalog per domain
+# MAGIC it is one catalog per domain holding a schema per layer. The run-log table is left to
+# MAGIC lakelogic, which owns its schema.
+# MAGIC Safe to re-run. Run this once before any pipeline.
+# MAGIC
+# MAGIC Unlike the Fabric bundle, the contracts are **not** embedded in this notebook.
+# MAGIC The Databricks bundle syncs <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">contracts/</span> into the workspace alongside these
+# MAGIC notebooks, so setup reads them from <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">contracts_root</span> and never writes them.
+# MAGIC
+# MAGIC **What this notebook does**
+# MAGIC
+# MAGIC 1. Installs LakeLogic (wheel, pinned version, or latest).
+# MAGIC 2. Reads the parameters.
+# MAGIC 3. Creates the catalogs, schemas, file Volumes and landing/log folders every <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">_system.yaml</span> declares.
+# MAGIC
+# MAGIC **Parameters**
+# MAGIC
+# MAGIC | Widget | Meaning |
+# MAGIC |---|---|
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">environment</span> | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">dev</span> \| <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">staging</span> \| <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">prod</span> |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">catalog</span> | the Unity Catalog to provision, or the catalog prefix under a catalog per domain |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">catalog_storage_root</span> | storage location for a catalog this notebook creates (blank = the metastore's own) |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">contracts_root</span> | workspace folder holding <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">contracts/</span> |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">volume_schema</span> | schema that holds the file Volumes (default <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">nondelta</span>) |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">lakelogic_version</span> / <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">lakelogic_wheel</span> | install source (blank = latest from PyPI; a wheel wins) |
+# MAGIC
+# MAGIC Ported from the LakeLogic Lakehouse Studio's Fabric bundle.
+# MAGIC generated by: LakeLogic Lakehouse Studio
+# MAGIC revision: chv1:d6a403cfb25db38875cf6d9b02ca55f110bb965134c260124966d706cf62f616
+# MAGIC governance seal: sha256:99ab2efa28cd857e17216020566340da8a2bc1029a8ac1822f073f2731e46d9f
+# MAGIC source: estate snapshot snap-8db66a0e80c042cd
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## 📍 Resolve inputs
+# MAGIC ## 1. Install LakeLogic
+# MAGIC
+# MAGIC Databricks pre-installs the packages named in a <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">%pip</span> cell at session start, so a
+# MAGIC bare <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">lakelogic</span> can report "already satisfied" and silently keep an older build --
+# MAGIC the run then tests the wrong code while looking correct. <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">--upgrade</span> (or an explicit
+# MAGIC <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">==</span>) forces pip to act. <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">restartPython()</span> is required after any <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">%pip</span> install
+# MAGIC before the new version is importable.
 
 # COMMAND ----------
 
+# DBTITLE 1,Resolve install source
+# Declare the parameters (the job passes values for these).
+dbutils.widgets.text("lakelogic_version", "", "LakeLogic version (blank = latest)")
+dbutils.widgets.text("lakelogic_wheel", "", "LakeLogic wheel (blank = PyPI)")
+# The extras the design needs: `documents` is added only when it reads PDFs, images or Word.
+dbutils.widgets.text("lakelogic_extras", "synthetic,pdf", "LakeLogic extras")
+
+# Read them.
+_version = dbutils.widgets.get("lakelogic_version").strip()
+_wheel = dbutils.widgets.get("lakelogic_wheel").strip()
+_extras = dbutils.widgets.get("lakelogic_extras").strip() or "synthetic,pdf"
+# A wheel wins over a version. `--force-reinstall` because Databricks pre-installs the
+# packages named in this cell at session start: without it a same-version wheel is
+# "already satisfied" and the run silently executes the PUBLISHED build instead.
+if _wheel:
+    # The extras on the wheel path too: a bare wheel installs no extras, and the
+    # synthetic seed needs reportlab to write documents. pip accepts extras on a local
+    # file exactly as it does on a package name.
+    lakelogic_pkg = f"{_wheel}[{_extras}] --force-reinstall"
+elif _version:
+    lakelogic_pkg = f"lakelogic[{_extras}]=={_version}"
+else:
+    lakelogic_pkg = f"lakelogic[{_extras}] --upgrade"
+print(f"Installing LakeLogic from: {lakelogic_pkg}")
+
+# COMMAND ----------
+
+# DBTITLE 1,Install LakeLogic
+# MAGIC # pyarrow<25: DBR ships an older pyarrow than lakelogic needs, and
+# MAGIC # databricks-connect caps it below 25.
+# MAGIC %pip install $lakelogic_pkg "pyarrow<25"
+
+# COMMAND ----------
+
+# DBTITLE 1,Restart Python
+dbutils.library.restartPython()
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 2. Parameters
+# MAGIC
+# MAGIC Widgets arrive as strings; a job run overrides them per run. One widget per line.
+
+# COMMAND ----------
+
+# DBTITLE 1,Parameters
+# Parameters — the Setup job overrides these.
+# Declare the parameters (the job passes values for these).
+dbutils.widgets.text("environment", "dev", "environment")                 # a key of _system.yaml environments
+dbutils.widgets.text("catalog", "", "catalog")  # the Unity Catalog to provision
+dbutils.widgets.text("contracts_root", "", "contracts_root")
+dbutils.widgets.text("volume_schema", "nondelta", "volume_schema")        # schema holding the file Volumes
+dbutils.widgets.text("catalog_storage_root", "", "catalog_storage_root")  # MANAGED LOCATION root for a catalog created here; blank = the metastore's
+dbutils.widgets.text("landing_runtime", "", "landing_runtime")  # where landing files come from (Deliver data-source step); blank = the registry's own path
+
+# Read them.
+environment = dbutils.widgets.get("environment")
+catalog = dbutils.widgets.get("catalog")
+contracts_root = dbutils.widgets.get("contracts_root")
+volume_schema = dbutils.widgets.get("volume_schema")
+catalog_storage_root = dbutils.widgets.get("catalog_storage_root")
+landing_runtime = dbutils.widgets.get("landing_runtime")
+
+# COMMAND ----------
+
+# DBTITLE 1,Landing source library
+"""Where a delivered notebook reads its landing files from — run inside the delivered project.
+
+This module imports only the standard library, and its source is pasted into the generated Databricks and Fabric notebooks in place of
+their landing-runtime placeholder, so the pipeline it runs and the function tested here are the
+same code. The Deliver data-source step (:mod:`deployment_target_data_source`) renders the
+``landing_runtime`` spec it consumes:
+
+* ``env``     ENV_NAME → the value of a per-environment parameter (already interpolated by the
+  platform: a bundle variable on Databricks, a pipeline parameter on Fabric);
+* ``secrets`` ENV_NAME → [scope, key] NAMES, read here through the platform's secret reader;
+* ``auth``    for a direct connection, the service principal, each part a literal or ``$ENV_NAME``.
+
+It fills ``os.environ`` before ``DomainRegistry.from_yaml`` (which resolves the ``ls_*`` keys
+from it) and sets account-scoped Azure OAuth for a direct connection. The client secret is held
+only in the Spark config: it is never exported to the environment and never printed.
+"""
+import json as _lr_json
+import os as _lr_os
+
+
+class LandingRuntimeError(RuntimeError):
+    """The landing source cannot be set up; the message names the variable to set."""
+
+
+def apply_landing_runtime(spec, get_secret, set_conf, environ=None):
+    """Apply ``spec`` (a dict or its JSON) and return what was set, by NAME only.
+
+    ``get_secret(scope, key)`` reads a secret (``dbutils.secrets.get`` on Databricks,
+    ``notebookutils.credentials.getSecret`` on Fabric); ``set_conf(key, value)`` sets a Spark
+    config (``spark.conf.set``)."""
+    environ = _lr_os.environ if environ is None else environ
+    if isinstance(spec, str):
+        spec = _lr_json.loads(spec) if spec.strip() else {}
+    spec = spec or {}
+    auth = spec.get("auth") or None
+    # The secret behind the client secret authenticates only: keep it out of the environment.
+    private = {auth["client_secret"][1:]} if auth and str(auth.get("client_secret", "")).startswith("$") else set()
+    values = {}
+    for name, value in (spec.get("env") or {}).items():
+        value = "" if value is None else str(value)
+        if not value.strip() or value.startswith("${"):
+            raise LandingRuntimeError(
+                f"Landing parameter {name.lower()} has no value for this environment. "
+                f"Set it on the deployment target (bundle variable / pipeline parameter) and re-run."
+            )
+        values[name] = value.strip()
+    for name, ref in (spec.get("secrets") or {}).items():
+        scope, key = (list(ref) + ["", ""])[:2]
+        if not str(scope).strip() or not str(key).strip() or str(scope).startswith("${"):
+            raise LandingRuntimeError(
+                f"Secret for {name.lower()} has no scope or key name for this environment. "
+                f"Set {name.lower()}_scope and {name.lower()}_key and re-run."
+            )
+        try:
+            values[name] = get_secret(str(scope).strip(), str(key).strip())
+        except Exception as exc:  # the platform's message names the scope; never the value
+            raise LandingRuntimeError(
+                f"Could not read secret {key!r} from {scope!r} for {name.lower()}: {type(exc).__name__}"
+            ) from None
+    for name, value in values.items():
+        if name not in private:
+            environ[name] = value
+
+    configured = None
+    if auth and auth.get("type") == "azure_service_principal":
+        def _v(part):
+            raw = str(auth.get(part) or "")
+            return values.get(raw[1:], environ.get(raw[1:], "")) if raw.startswith("$") else raw
+
+        account, tenant, client, secret = (_v("storage_account"), _v("tenant_id"),
+                                           _v("client_id"), _v("client_secret"))
+        missing = [p for p, v in (("storage_account", account), ("tenant_id", tenant),
+                                  ("client_id", client), ("client_secret", secret)) if not v]
+        if missing:
+            raise LandingRuntimeError(f"Direct connection is missing {', '.join(missing)}.")
+        host = f"{account}.dfs.core.windows.net"
+        set_conf(f"fs.azure.account.auth.type.{host}", "OAuth")
+        set_conf(f"fs.azure.account.oauth.provider.type.{host}",
+                 "org.apache.hadoop.fs.azurebfs.oauth2.ClientCredsTokenProvider")
+        set_conf(f"fs.azure.account.oauth2.client.id.{host}", client)
+        set_conf(f"fs.azure.account.oauth2.client.secret.{host}", secret)
+        set_conf(f"fs.azure.account.oauth2.client.endpoint.{host}",
+                 f"https://login.microsoftonline.com/{tenant}/oauth2/token")
+        configured = host
+    return {"environment": sorted(n for n in values if n not in private),
+            "secrets": sorted((spec.get("secrets") or {}).keys()),
+            "direct_connection": configured}
+
+
+_FABRIC_API = "https://api.fabric.microsoft.com/v1"
+
+
+def ensure_onelake_shortcut(spec, get_token, workspace_id, lakehouse_id, request, environ=None):
+    """Create the OneLake shortcut ``Files/<name>`` → ADLS that a Fabric ``shortcut`` data
+    source reads through, once. Run by setup after :func:`apply_landing_runtime`.
+
+    An existing shortcut with the same target is left alone; one pointing anywhere else stops
+    setup rather than read the wrong storage. ``request(method, url, headers, body)`` returns
+    ``(status, json_or_None)``; ``get_token()`` returns a Fabric API bearer token. The
+    connection's credentials stay in Fabric: only its ID is sent."""
+    environ = _lr_os.environ if environ is None else environ
+    if isinstance(spec, str):
+        spec = _lr_json.loads(spec) if spec.strip() else {}
+    sc = (spec or {}).get("shortcut")
+    if not sc:
+        return None
+
+    def _v(part):
+        raw = str(sc.get(part) or "")
+        return environ.get(raw[1:], "") if raw.startswith("$") else raw
+
+    name, account, container = _v("shortcut_name"), _v("storage_account"), _v("container")
+    folder, connection = _v("folder").strip("/"), _v("connection_id")
+    missing = [p for p, v in (("shortcut_name", name), ("storage_account", account),
+                              ("container", container), ("connection_id", connection)) if not v]
+    if missing:
+        raise LandingRuntimeError(f"OneLake shortcut is missing {', '.join(missing)}.")
+    location = f"https://{account}.dfs.core.windows.net"
+    subpath = "/" + "/".join(p for p in (container, folder) if p)
+    base = f"{_FABRIC_API}/workspaces/{workspace_id}/items/{lakehouse_id}/shortcuts"
+    headers = {"Authorization": f"Bearer {get_token()}", "Content-Type": "application/json"}
+
+    status, body = request("GET", f"{base}/Files/{name}", headers, None)
+    if status == 200:
+        target = ((body or {}).get("target") or {}).get("adlsGen2") or {}
+        same = (str(target.get("location", "")).rstrip("/").lower() == location.lower()
+                and str(target.get("subpath", "")).rstrip("/") == subpath)
+        if not same:
+            raise LandingRuntimeError(
+                f"Files/{name} already exists and points at {target.get('location')}{target.get('subpath')}, "
+                f"not {location}{subpath}. Rename the shortcut or remove the old one."
+            )
+        return {"shortcut": f"Files/{name}", "target": location + subpath, "created": False}
+    if status != 404:
+        raise LandingRuntimeError(f"Could not read shortcut Files/{name}: HTTP {status}.")
+    payload = {"path": "Files", "name": name,
+               "target": {"adlsGen2": {"location": location, "subpath": subpath, "connectionId": connection}}}
+    status, body = request("POST", base, headers, payload)
+    if status not in (200, 201):
+        detail = (body or {}).get("message") or (body or {}).get("errorCode") or ""
+        raise LandingRuntimeError(f"Creating shortcut Files/{name} failed: HTTP {status} {detail}".rstrip())
+    return {"shortcut": f"Files/{name}", "target": location + subpath, "created": True}
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 3. Provision the mesh
+# MAGIC
+# MAGIC Every statement is <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">IF NOT EXISTS</span> and no landing data is touched, so this is safe to re-run.
+
+# COMMAND ----------
+
+# DBTITLE 1,Provision catalog, schemas and folders
+# Create the catalog, schemas, Volumes and landing/log folders.
+# Safe to re-run: every statement is IF NOT EXISTS and no landing data is touched.
+import csv
 import os
-import shutil
+import traceback
 
-CATALOG = dbutils.widgets.get("catalog").strip() or "rideflow_dev_platform"
-RESET = dbutils.widgets.get("reset").strip().lower() == "true"
-STORAGE_ROOT = dbutils.widgets.get("storage_root").strip()
-contracts_src = dbutils.widgets.get("contracts_src").strip()
-ENVIRONMENT = dbutils.widgets.get("environment").strip() or "dev"
+# The registry is the authority on where a system's data lives. Walking the contracts
+# tree means setup provisions exactly what the contracts declare, rather than a
+# convention that has to be kept in step with them by hand.
+from lakelogic.core.registry import DomainRegistry
 
-# Auto-detect the synced contract registry by walking UP from this notebook's own
-# location and checking each ancestor for a `contracts` child. Robust to how
-# deep the bundle nests the notebook (e.g. .../files/contracts while the
-# notebook is at .../files/databricks/notebooks/nb_00_setup).
-if not contracts_src:
+os.environ[f"DATABRICKS_{environment.upper()}_CATALOG"] = catalog
+
+# Where landing files come from (the Deliver data-source step): parameters, secret NAMES and,
+# for a direct connection, the service principal's Spark config. Blank = the registry's own path.
+_landing_source = apply_landing_runtime(landing_runtime, dbutils.secrets.get, spark.conf.set)
+if str(landing_runtime).strip():
+    print(f"Landing source: {_landing_source}")
+
+# `lakelogic_run_log` is deliberately NOT created here. lakelogic writes it with a
+# 36-column schema that includes `error_traceback` and `lakelogic_version`; the Fabric
+# bundle pre-creates a 19-column subset, and a pre-existing narrower table silently
+# DROPS those columns on write. That is how a failing contract recorded only
+# "'Column' object is not callable" with no line number -- the frames were captured and
+# then thrown away. Letting lakelogic own the schema keeps the one field worth having.
+
+
+def _sql(stmt):
+    print(f"  -> {stmt}")
+    spark.sql(stmt)  # noqa: F821 (Databricks global)
+
+
+def _repair_run_log(run_log_schema):
+    """Drop a `lakelogic_run_log` left behind by an earlier, narrower setup.
+
+    A pre-existing table with fewer columns than lakelogic writes does not fail the
+    write -- it silently drops the extra fields, which is how `error_traceback` and
+    `lakelogic_version` went missing and a failing contract recorded 31 characters with
+    no line number. Only a table that is ALREADY wrong is dropped, and only a run log:
+    no contract data lives here.
+    """
+    table = f"{run_log_schema}.lakelogic_run_log"
     try:
-        ctx = dbutils.notebook.entry_point.getDbutils().notebook().getContext()
-        nb_path = ctx.notebookPath().get()
-        parts = nb_path.split("/")
-        for i in range(len(parts), 0, -1):
-            candidate = "/Workspace" + "/".join(parts[:i]) + "/contracts"
-            if os.path.isdir(candidate):
-                contracts_src = candidate
-                break
+        columns = {r["col_name"] for r in spark.sql(f"DESCRIBE {table}").collect()}  # noqa: F821
+    except Exception:
+        return  # not there yet -- lakelogic creates it on first write, correctly
+    if "error_traceback" in columns:
+        return
+    print(f"  ! {table} predates the full run-log schema "
+          f"({len(columns)} columns, no error_traceback) -- dropping so lakelogic recreates it")
+    _sql(f"DROP TABLE IF EXISTS {table}")
+
+
+def _system_yamls():
+    """Every `_system.yaml` under `contracts_root`, as driver-local paths."""
+    found = []
+    for root, _dirs, files in os.walk(contracts_root):
+        if "_system.yaml" in files:
+            found.append(os.path.join(root, "_system.yaml"))
+    return sorted(found)
+
+
+def _list_domains():
+    """Domain directory names under `contracts_root`."""
+    try:
+        return sorted(
+            d for d in os.listdir(contracts_root)
+            if os.path.isdir(os.path.join(contracts_root, d))
+        )
+    except FileNotFoundError:
+        return []
+
+
+def _write_header_only_seeds(registry):
+    """A header-only seed CSV for every contract whose rows come from `external_logic`.
+
+    The date dimension reads a landing folder only so its source exists — LakeLogic
+    refuses a missing one — and its generator replaces the rows. A folder that already
+    holds a CSV is left alone: setup never overwrites landing data.
+    """
+    written = []
+    for rc in registry.get_active_contracts():
+        cd = rc.contract_dict or {}
+        path = str((cd.get("source") or {}).get("path") or "")
+        if not cd.get("external_logic") or not path:
+            continue
+        os.makedirs(path, exist_ok=True)
+        if any(f.endswith(".csv") for f in os.listdir(path)):
+            continue
+        columns = [f["name"] for f in ((cd.get("model") or {}).get("fields") or [])]
+        target = os.path.join(path, "seed.csv")
+        with open(target, "w", newline="", encoding="utf-8") as out:
+            csv.writer(out).writerow(columns)
+        written.append(target)
+        print(f"  ok seed {target} ({len(columns)} columns)")
+    return written
+
+
+try:
+    domains = _list_domains()
+    print(f"Domains discovered under {contracts_root}: {domains}")
+    if not domains:
+        raise RuntimeError(
+            f"No domains under {contracts_root}. The bundle did not sync contracts/ to "
+            "this path — check `contracts_root` against `databricks bundle validate` "
+            "(workspace.file_path) and re-run 00_setup."
+        )
+
+    # Tables are created by the pipeline driver (`ddl_only`), so names match what it
+    # writes. Schemas, landing and log folders come from each `_system.yaml` `storage.*`,
+    # which is what makes everything created below match the contracts exactly — one
+    # catalog with a schema per domain, or a catalog per domain with a schema per layer.
+    roots, registries = [], []
+    for system_yaml in _system_yamls():
+        try:
+            registry = DomainRegistry.from_yaml(
+                path=system_yaml, environment=environment, storage_mode="catalog",
+            )
+        except Exception as exc:
+            print(f"  ! could not read {system_yaml}: {exc}")
+            continue
+        registries.append(registry)
+        for root in (registry.storage.landing_root, registry.storage.log_root):
+            if str(root or "").strip():
+                roots.append(str(root).strip())
+
+    if not registries:
+        raise RuntimeError(
+            f"No _system.yaml under {contracts_root} could be read, so there is nothing to "
+            "say which catalogs and schemas to create. See the messages above."
+        )
+
+    def _catalog_schema(root):
+        """('catalog', 'schema') from a `catalog`.schema table root, else None."""
+        parts = [p.strip().strip("`") for p in str(root or "").split(".")]
+        return (parts[0], parts[1]) if len(parts) == 2 and all(parts) else None
+
+    def _table_schemas(storage):
+        """Every schema a registry writes tables to: each layer's root (or the domain
+        catalog when the layer has none), the engine's own tables, and quarantine."""
+        domain_catalog = getattr(storage, "domain_catalog", None)
+        wanted = [getattr(storage, f"{layer}_root", None) or domain_catalog for layer in ("bronze", "silver", "gold")]
+        wanted += [domain_catalog, getattr(storage, "quarantine_root", None)]
+        return [cs for cs in map(_catalog_schema, wanted) if cs]
+
+    def _volume(root):
+        """('catalog', 'schema', 'volume') from a /Volumes/... path, else None."""
+        parts = [p for p in str(root).split("/") if p]
+        return tuple(parts[1:4]) if len(parts) >= 4 and parts[0] == "Volumes" else None
+
+    schemas = list(dict.fromkeys(cs for r in registries for cs in _table_schemas(r.storage)))
+    # Landing files and logs are NOT Delta. They go in Volumes; Delta tables must not,
+    # because the path-based writer needs atomic renames the Volume FUSE layer forbids.
+    volumes = list(dict.fromkeys(v for v in map(_volume, dict.fromkeys(roots)) if v))
+    catalogs = list(dict.fromkeys([c for c, _ in schemas] + [v[0] for v in volumes]))
+
+    def _catalog_exists(name):
+        try:
+            return spark.sql(f"SHOW CATALOGS LIKE '{name}'").count() > 0  # noqa: F821
+        except Exception:
+            return False
+
+    created_catalogs = []
+    for cat in catalogs:
+        # Existence first: where a metastore has no default storage, CREATE CATALOG IF NOT
+        # EXISTS fails for a catalog that is already there.
+        if _catalog_exists(cat):
+            print(f"  ok catalog `{cat}` exists")
+            continue
+        location = str(catalog_storage_root).strip().rstrip("/")
+        try:
+            _sql(f"CREATE CATALOG IF NOT EXISTS `{cat}`" + (f" MANAGED LOCATION '{location}/{cat}'" if location else ""))
+        except Exception as exc:
+            raise RuntimeError(
+                f"Could not create catalog `{cat}`: {str(exc).splitlines()[0][:200]}. Creating a "
+                "catalog needs the CREATE CATALOG privilege on the metastore, and on a metastore "
+                "with no default storage a location: set the `catalog_storage_root` bundle "
+                "variable, or ask an administrator to create the catalog and re-run."
+            ) from exc
+        created_catalogs.append(cat)
+
+    for cat, schema in schemas:
+        _sql(f"CREATE SCHEMA IF NOT EXISTS `{cat}`.`{schema}`")
+    for run_log_schema in dict.fromkeys(str(r.storage.domain_catalog) for r in registries if r.storage.domain_catalog):
+        _repair_run_log(run_log_schema)
+
+    for cat in created_catalogs:
+        # A new catalog arrives with an empty `default` schema nothing here uses. Only a
+        # catalog this run created, and never CASCADE: one that holds anything is kept.
+        try:
+            spark.sql(f"DROP SCHEMA IF EXISTS `{cat}`.`default`")  # noqa: F821
+            print(f"  -> dropped the empty `default` schema of `{cat}`")
+        except Exception as exc:
+            print(f"  ! kept `{cat}`.`default`: {str(exc).splitlines()[0][:120]}")
+
+    # A Volume path is /Volumes/<catalog>/<schema>/<volume>/<subpath>, so the third
+    # segment names a Volume that has to exist before anything can be written under it.
+    # `landing_root: /Volumes/{catalog}/nondelta/landing_{domain}/{system}` therefore
+    # means one Volume per domain, not one shared Volume.
+    for root in dict.fromkeys(roots):
+        parts = [p for p in root.split("/") if p]
+        if len(parts) >= 4 and parts[0] == "Volumes":
+            _, cat, schema, vol = parts[:4]
+            _sql(f"CREATE SCHEMA IF NOT EXISTS `{cat}`.`{schema}`")
+            _sql(f"CREATE VOLUME IF NOT EXISTS `{cat}`.`{schema}`.`{vol}`")
+        else:
+            # Remote landing storage (external location / direct connection) belongs to the
+            # source system: setup only checks it can be listed, and never creates it.
+            try:
+                dbutils.fs.ls(root)
+                print(f"  ok remote {root} (readable)")
+            except Exception as exc:
+                print(f"  ! remote {root} could not be listed: {type(exc).__name__}. "
+                      "Check the external location grant or the direct-connection secret.")
+            continue
+        os.makedirs(root, exist_ok=True)
+        print(f"  ok {root}")
+
+    # Seeds are written only after the Volumes above exist.
+    for registry in registries:
+        _write_header_only_seeds(registry)
+
+    print("=" * 60)
+    print(f"  Catalogs  : {', '.join(catalogs)}")
+    print(f"  Schemas   : {', '.join(f'{c}.{s}' for c, s in schemas)}")
+    print(f"  Volumes   : {len(volumes)}")
+    print("=" * 60)
+except Exception:
+    tb = traceback.format_exc()
+    print(tb)
+    try:
+        # Beside the first log root a registry declares, when one was read before the failure.
+        log_dir = next((r for r in locals().get("roots", []) if "log" in r.rsplit("/", 1)[-1].lower()),
+                       f"/Volumes/{catalog}/{volume_schema}/lakelogic_logs")
+        os.makedirs(log_dir, exist_ok=True)
+        with open(f"{log_dir}/setup_error.txt", "w", encoding="utf-8") as fh:
+            fh.write(tb)
     except Exception:
         pass
-
-if not contracts_src or not os.path.isdir(contracts_src):
-    raise FileNotFoundError(
-        f"Contracts source not found: {contracts_src}\n"
-        "Deploy the bundle first (`databricks bundle deploy`) so contracts "
-        "is synced into the workspace, or set the 'contracts_src' widget."
-    )
-
-# Domains = top-level directories of the contract registry.
-domains = sorted(
-    d for d in os.listdir(contracts_src)
-    if os.path.isdir(os.path.join(contracts_src, d))
-)
-
-print(f"🗂  Catalog        : {CATALOG}")
-print(f"📖 Contracts src  : {contracts_src}")
-print(f"🌐 Domains        : {', '.join(domains)}")
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## 🏗️ Create catalog, schemas & volumes
-# MAGIC All statements are <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">IF NOT EXISTS</span> — safe to re-run.
-# MAGIC
-# MAGIC > **Permissions:** creating a catalog needs the metastore <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">CREATE CATALOG</span>
-# MAGIC > privilege. If you don't have it, ask an admin to create an empty catalog
-# MAGIC > and set the <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">catalog</span> widget to it — this notebook then just adds the
-# MAGIC > schemas and volumes inside it.
-
-# COMMAND ----------
-
-def sql(stmt: str):
-    print(f"  → {stmt}")
-    spark.sql(stmt)
-
-# ── Reset: drop an orphaned catalog before rebuilding ─────────────────────────
-# Only ever targets the catalog named in the widget, and refuses the shared ones a
-# typo could otherwise destroy. CASCADE takes the schemas, tables and volumes with it,
-# which is the point: a half-orphaned catalog cannot be repaired in place.
-_PROTECTED = {"main", "system", "samples", "hive_metastore", "workspace", "default"}
-
-
-def purge_catalog(name: str) -> None:
-    if name.lower() in _PROTECTED:
-        raise ValueError(
-            f"Refusing to drop `{name}` — it is a shared/system catalog. "
-            f"Set the 'catalog' widget to the demo catalog you actually want rebuilt."
-        )
-    print(f"  ⚠ RESET requested — dropping catalog `{name}` and everything in it")
-    # Volumes first: a managed volume whose storage is unreachable can block the
-    # catalog drop, and the error it raises names the volume rather than the cause.
-    try:
-        for row in spark.sql(f"SHOW SCHEMAS IN `{name}`").collect():
-            schema = row[0]
-            if schema == "information_schema":
-                continue
-            try:
-                for v in spark.sql(f"SHOW VOLUMES IN `{name}`.`{schema}`").collect():
-                    vol = v[1] if len(v) > 1 else v[0]
-                    try:
-                        sql(f"DROP VOLUME IF EXISTS `{name}`.`{schema}`.`{vol}`")
-                    except Exception as e:            # noqa: BLE001
-                        print(f"    · volume {schema}.{vol} not dropped: {e}")
-            except Exception:                          # noqa: BLE001
-                pass                                   # schema carries no volumes
-    except Exception as e:                             # noqa: BLE001
-        print(f"    · could not enumerate schemas ({e}) — going straight to DROP CATALOG")
-
-    sql(f"DROP CATALOG IF EXISTS `{name}` CASCADE")
-    print(f"  ✓ Catalog `{name}` dropped")
-
-
-if RESET:
-    purge_catalog(CATALOG)
-
-
-# ── Catalog ───────────────────────────────────────────────────────────────────
-def _catalog_exists(name: str) -> bool:
-    try:
-        return spark.sql(f"SHOW CATALOGS LIKE '{name}'").count() > 0
-    except Exception:
-        return False
-
-# Check existence FIRST. On Default-Storage workspaces, `CREATE CATALOG IF NOT
-# EXISTS` is NOT a clean no-op for an existing catalog — it resolves the managed
-# storage root before the existence check and errors with INVALID_STATE. So only
-# attempt creation when the catalog is genuinely absent; a re-run stays quiet.
-if _catalog_exists(CATALOG):
-    print(f"  ✓ Catalog `{CATALOG}` already exists — skipping creation")
-else:
-    try:
-        # A metastore with no storage root rejects a bare CREATE CATALOG; it needs the
-        # location spelled out. Pass `storage_root` and the same statement works on both
-        # kinds of metastore, which is what makes this bootstrap portable.
-        if STORAGE_ROOT:
-            sql(f"CREATE CATALOG IF NOT EXISTS `{CATALOG}` "
-                f"MANAGED LOCATION '{STORAGE_ROOT.rstrip('/')}/{CATALOG}'")
-        else:
-            sql(f"CREATE CATALOG IF NOT EXISTS `{CATALOG}`")
-    except Exception as e:
-        print(f"  ⚠ CREATE CATALOG `{CATALOG}` failed: {e}")
-
-if not _catalog_exists(CATALOG):
-    raise PermissionError(
-        f"Catalog `{CATALOG}` does not exist and could not be created.\n"
-        f"You most likely lack the metastore CREATE CATALOG privilege (common on "
-        f"trial/shared workspaces), or the metastore has no default storage for new "
-        f"managed catalogs.\n"
-        f"Fix — pick one:\n"
-        f"  1. Default Storage workspace? Create the catalog once in the UI — "
-        f"Catalog ▸ Create catalog ▸ name it '{CATALOG}' ▸ Default Storage ▸ Create — "
-        f"then re-run this notebook.\n"
-        f"  2. OR set the 'catalog' widget to an EXISTING catalog you can write to "
-        f"(run `SHOW CATALOGS` — e.g. 'workspace') and re-run; this notebook then just "
-        f"adds the schemas and volumes inside it.\n"
-        f"  3. OR a metastore admin runs:  "
-        f"CREATE CATALOG {CATALOG} MANAGED LOCATION '<storage-path>';"
-    )
-
-# ── Operational schema for UC Volumes (landing, contracts, logs) ──────────────
-sql(f"CREATE SCHEMA IF NOT EXISTS `{CATALOG}`.`nondelta`")
-sql(f"CREATE VOLUME IF NOT EXISTS `{CATALOG}`.`nondelta`.`_contracts`")
-sql(f"CREATE VOLUME IF NOT EXISTS `{CATALOG}`.`nondelta`.`_logs`")
-sql(f"CREATE VOLUME IF NOT EXISTS `{CATALOG}`.`nondelta`.`_wheels`")  # lakelogic wheels shipped before a PyPI release
-
-# ── Quarantine schema (contract-failing rows land here) ───────────────────────
-# Quarantine lives in each domain schema as quarantine_<table> (Build Centre layout),
-# so there is no separate `quarantine` schema to create.
-
-# ── Per-domain schema (delta tables) + landing Volume ─────────────────────────
-# We also PRE-CREATE the run-log + SLO Delta tables per domain. The LakeLogic
-# engine writes a run-log row per contract; under parallel processing several
-# contracts otherwise race to CREATE the shared table on the first run against a
-# fresh catalog (first wins, the rest warn TABLE_OR_VIEW_ALREADY_EXISTS and their
-# row is dropped). Creating the tables up front means every contract simply
-# appends/merges — no race. Schema mirrors lakelogic.core.run_log (the engine
-# ALTERs to add any columns a newer version introduces, so this is forward-safe).
-_RUN_LOG_COLS = """(
-  pipeline_run_id STRING, run_id STRING, timestamp STRING, start_time STRING,
-  end_time STRING, run_duration_seconds DOUBLE, engine STRING, contract STRING,
-  contract_version STRING, stage STRING, dataset STRING, domain STRING,
-  system STRING, environment STRING, data_layer STRING, status STRING,
-  error_message STRING, source_path STRING, counts_source BIGINT,
-  counts_total BIGINT, counts_good BIGINT, counts_quarantined BIGINT,
-  quarantine_ratio DOUBLE, estimated_cost DOUBLE, cost_currency STRING,
-  cost_confidence STRING, max_source_mtime DOUBLE, max_watermark_value STRING,
-  dlt_state_json STRING, slo_json STRING, report_json STRING
-)"""
-
-# The erasure queue: people / DSR tools INSERT rows, the erasure job erases them and
-# sets status. Pre-created so a request can be filed before the first erasure run.
-# Schema mirrors lakelogic.core.erasure_requests.REQUEST_COLUMNS (the engine's own
-# CREATE IF NOT EXISTS is the same table, so either may create it first).
-_ERASURE_REQUEST_COLS = """(
-  request_id STRING, framework STRING, subject_column STRING, subject_id STRING,
-  requested_at TIMESTAMP, requested_by STRING, reason STRING, status STRING,
-  processed_at TIMESTAMP, run_id STRING, system STRING
-)"""
-
-def own_catalog(domain: str):
-    """The domain's own catalog name, or None when it is a schema of the shared catalog.
-    A system registry that declares a schema per layer (`storage.bronze_root` / `silver_root`
-    / `gold_root`) names it `<domain_catalog_prefix>_<domain>`, the prefix coming from the
-    registry's block for this environment. The registry decides; this only reads it."""
-    import glob
-
-    import yaml
-
-    for reg in sorted(glob.glob(os.path.join(contracts_src, domain, "*", "_system.yaml"))):
-        with open(reg, encoding="utf-8") as fh:
-            doc = yaml.safe_load(fh) or {}
-        storage = doc.get("storage") or {}
-        prefix = ((doc.get("environments") or {}).get(ENVIRONMENT) or {}).get("domain_catalog_prefix")
-        if prefix and any(storage.get(f"{layer}_root") for layer in ("bronze", "silver", "gold")):
-            return f"{prefix}_{domain}"
-    return None
-
-
-def managed_location() -> str:
-    """Where a new domain catalog keeps its managed tables: the widget if set, else the
-    storage root the shared catalog already uses (this metastore has no default root)."""
-    if STORAGE_ROOT:
-        return STORAGE_ROOT.rstrip("/")
-    rows = spark.sql(f"DESCRIBE CATALOG EXTENDED `{CATALOG}`").collect()
-    info = {r[0]: r[1] for r in rows}
-    return (info.get("Storage Root") or "").rstrip("/")
-
-
-def drop_default_schema(catalog: str) -> None:
-    """Remove the empty `default` schema Databricks adds to every new catalog, so a catalog
-    lists only the schemas the platform uses. No CASCADE: a `default` that holds anything is
-    left alone and reported, never emptied."""
-    try:
-        spark.sql(f"DROP SCHEMA IF EXISTS `{catalog}`.`default`")
-        print(f"  → dropped empty schema `{catalog}`.`default` (if it existed)")
-    except Exception as e:  # noqa: BLE001
-        print(f"  ⚠ kept `{catalog}`.`default`: it is not empty or cannot be dropped ({str(e).splitlines()[0][:120]})")
-
-
-drop_default_schema(CATALOG)
-
-for domain in domains:
-    own = own_catalog(domain)
-    if own:
-        # A CATALOG PER DOMAIN: a schema per layer, the landing volume under `files` (the schema
-        # for every file volume, inbound or outbound), and the
-        # engine's own tables under `lakelogic`. One grant then covers a layer.
-        root = managed_location()
-        sql(f"CREATE CATALOG IF NOT EXISTS `{own}`" + (f" MANAGED LOCATION '{root}'" if root else ""))
-        for schema in ("files", "bronze", "silver", "gold", "quarantine", "lakelogic"):
-            sql(f"CREATE SCHEMA IF NOT EXISTS `{own}`.`{schema}`")
-        sql(f"CREATE VOLUME IF NOT EXISTS `{own}`.`files`.`landing`")
-        drop_default_schema(own)
-        meta = f"`{own}`.`lakelogic`"
-    else:
-        sql(f"CREATE SCHEMA IF NOT EXISTS `{CATALOG}`.`{domain}`")
-        sql(f"CREATE VOLUME IF NOT EXISTS `{CATALOG}`.`nondelta`.`landing_{domain}`")
-        meta = f"`{CATALOG}`.`{domain}`"
-    # Managed Delta run-log table (matches metadata.run_log_table = {domain_catalog}._lakelogic_run_log).
-    # _lakelogic_slo_checks is intentionally NOT pre-created: the demo produces no SLO checks,
-    # so it never races; the engine will create it with its own schema if needed.
-    sql(f"CREATE TABLE IF NOT EXISTS {meta}.`_lakelogic_run_log` {_RUN_LOG_COLS} USING DELTA")
-    sql(f"CREATE TABLE IF NOT EXISTS {meta}.`_lakelogic_erasure_requests` {_ERASURE_REQUEST_COLS} USING DELTA")
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## 📦 Stage the contract registry into the <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">_contracts</span> Volume
-# MAGIC The pipeline driver reads contracts from
-# MAGIC <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">/Volumes/&lt;catalog&gt;/nondelta/_contracts/&lt;domain&gt;/&lt;system&gt;/_system.yaml</span>,
-# MAGIC so we copy the synced registry into that Volume.
-
-# COMMAND ----------
-
-contracts_vol = f"/Volumes/{CATALOG}/nondelta/_contracts"
-
-
-def assert_volume_writable(path: str) -> None:
-    """Prove the Volume is reachable, using the API serverless actually supports.
-
-    This job runs on SERVERLESS compute, where local POSIX writes into `/Volumes` are
-    restricted: `os.makedirs` appears to succeed and then `open(..., "w")` fails with
-    `[Errno 22] Invalid argument` — which reads exactly like unreachable storage and is
-    not. `dbutils.fs` is the supported path, so the probe uses it."""
-    probe = f"{path}/lakelogic_write_probe.tmp"
-    try:
-        dbutils.fs.put(probe, "ok", True)
-        dbutils.fs.rm(probe)
-    except Exception as e:                                  # noqa: BLE001
-        raise OSError(
-            f"Volume `{path}` is not writable ({e}). "
-            f"If `{CATALOG}` was created by a workspace that no longer exists, its managed "
-            f"storage cannot be reached from this one — UC catalogs outlive their workspace. "
-            f"Re-run with reset=true to drop and rebuild it, or point the 'catalog' widget "
-            f"at a catalog this workspace owns."
-        ) from e
-
-
-assert_volume_writable(contracts_vol)
-
-
-def copy_into_volume(src: str, dst: str) -> int:
-    """Copy a tree into a UC Volume via `dbutils.fs`.
-
-    Neither `shutil.copytree` (it replays POSIX metadata Volumes reject) nor plain
-    `open()` (restricted on serverless) works here. `dbutils.fs.cp` with the `file:`
-    scheme reads the synced workspace files and writes through the Volumes API."""
-    dbutils.fs.cp(f"file:{src}", dst, recurse=True)
-    return sum(len(files) for _, _, files in os.walk(src))
-
-
-copied = 0
-for domain in domains:
-    src = os.path.join(contracts_src, domain)
-    dst = os.path.join(contracts_vol, domain)
-    # MIRROR, not merge. A plain copy never removed a contract that was renamed or deleted
-    # in the repo, so the Volume kept every old name (23 stale files by 2026-10-13, among
-    # them two retired dimensions). The synthetic-data driver globs this folder, so a stale
-    # contract is not just clutter. The Volume holds nothing but this staged copy.
-    dbutils.fs.rm(dst, True)
-    n = copy_into_volume(src, dst)
-    copied += n
-    print(f"  ✓ {domain:<14} → {dst}  ({n} files)")
-
-print(f"\n📦 Staged {copied} contract files into {contracts_vol}")
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## ✅ Manifest
-
-# COMMAND ----------
-
-print("═" * 70)
-print(f"  RideFlow demo provisioned on Unity Catalog: {CATALOG}")
-print("═" * 70)
-print(f"  Schemas   : nondelta, {', '.join(domains)}")
-print(f"  Volumes   : nondelta/_contracts, nondelta/_logs,")
-for domain in domains:
-    print(f"              nondelta/landing_{domain}")
-print()
-print("  Next:")
-print("    1. Deploy the workflows:  databricks bundle deploy -t dev")
-print("    2. Run a domain orchestrator (e.g. 'marketplace / rideflow — Full")
-print("       Pipeline Orchestrator') with enable_test_data / bronze / silver /")
-print("       gold = true to generate and process data end to end.")
-print()
-print(f"  Teardown  : DROP CATALOG `{CATALOG}` CASCADE;")
-print("═" * 70)
+    raise

@@ -1,0 +1,84 @@
+version: 1.0.0
+
+info:
+  title: Bronze — Salesforce Contacts
+  target_layer: bronze
+  table_name: '{bronze_layer}_salesforce_contacts'
+  domain: business
+  system: salesforce
+
+model:
+  fields:
+  - name: attributes
+    type: json
+    description: Observed json column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_contacts.
+  - name: Id
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_contacts.
+  - name: AccountId
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_contacts.
+  - name: FirstName
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_contacts.
+  - name: LastName
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_contacts.
+  - name: Email
+    type: string
+    pii: true
+    classification: email
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_contacts. Personal data (email), not masked.
+  - name: Title
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_contacts.
+  - name: Phone
+    type: string
+    pii: true
+    classification: phone
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_contacts. Personal data (phone), not masked.
+  - name: MailingCity
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_contacts.
+  - name: CreatedDate
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_contacts.
+  - name: LastModifiedDate
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_contacts.
+  - name: SystemModstamp
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_contacts.
+  - name: IsDeleted
+    type: boolean
+    description: Observed boolean column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_contacts.
+
+source:
+  type: landing
+  path: '{landing_root}/contacts'
+  format: json
+  partition:
+    format: y_%Y/m_%m/d_%d
+  load_mode: incremental
+  watermark_strategy: pipeline_log
+
+primary_key:
+- Id
+
+metadata:
+  run_log_table: '{domain_catalog}.lakelogic_run_log'
+
+dataset: bronze_salesforce_contacts

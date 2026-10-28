@@ -1,308 +1,390 @@
 # Databricks notebook source
-# ═══════════════════════════════════════════════════════════════════════════════
-# Notebook  : nb_compliance_erasure — GDPR / HIPAA Erasure Workflows
-# Purpose   : Executes privacy erasure (nullify, hash, or redact) on
-#             materialized tables for specified data subjects. Generates
-#             audit-ready erasure reports.
-#
-# Two modes:
-#   * Queue (default) — GDPR IDs and HIPAA IDs both blank: erase every open
-#     request in <catalog>.<domain>._lakelogic_erasure_requests for this
-#     system, then mark each completed / failed. A dry run marks them
-#     dry_run and leaves them open for the next real run.
-#   * Explicit — GDPR/HIPAA column + IDs set: erase exactly those IDs.
-#
-# Called by:
-#   Databricks workflow or run interactively for compliance operations.
-# ═══════════════════════════════════════════════════════════════════════════════
 
+# COMMAND ----------
 
-# ── LakeLogic source ──────────────────────────────────────────────────
-# Blank widget = install the published package from PyPI (what the demo does).
-# Set it to a wheel in the catalog's _wheels Volume to run an UNRELEASED build:
-#   platform/scripts/upload_lakelogic_wheel.sh   ->  prints the path to paste here
-# That is the only way to exercise a LakeLogic change on Databricks BEFORE it
-# is published, rather than discovering a bad release from the demo breaking.
-dbutils.widgets.text("lakelogic_wheel", "", "LakeLogic wheel (blank = PyPI)")
+# MAGIC %md
+# MAGIC # compliance_erasure - right to erasure (Databricks)
+# MAGIC
+# MAGIC Plans by default. Changes data only with <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">dry_run = "false"</span> and <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">confirm = "ERASE"</span>. LakeLogic's engine writer records one row per table to <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">lakelogic_erasure_evidence</span>, beside the domain's <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">lakelogic_run_log</span>. Rows carry counts only - never a subject ID.
+# MAGIC
+# MAGIC **What this notebook does**
+# MAGIC
+# MAGIC 1. Installs LakeLogic.
+# MAGIC 2. Reads the parameters and, optionally, configures telemetry.
+# MAGIC 3. Loads the system registry.
+# MAGIC 4. Resolves the engine's erasure evidence table.
+# MAGIC 5. Plans the erasure per table, applies it only when confirmed, and records one evidence row per table.
+# MAGIC
+# MAGIC **Parameters**
+# MAGIC
+# MAGIC | Widget | Meaning |
+# MAGIC |---|---|
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">catalog</span> | Unity Catalog this run reads and writes |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">contracts_root</span> | workspace folder holding <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">contracts/</span> |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">domain</span> / <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">system</span> | which <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">_system.yaml</span> registry to load |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">environment</span> | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">dev</span> \| <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">staging</span> \| <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">prod</span> |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">storage_mode</span> | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">catalog</span> \| <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">path</span> |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">subject_column</span> / <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">subject_ids</span> / <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">subject_ids_file</span> | who to erase |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">strategy</span> / <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">hash_salt</span> | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">nullify</span> or hash; salt for hashing |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">entity_filter</span> | restrict to these entities |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">dry_run</span> / <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">confirm</span> / <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">case_ref</span> | plan by default; apply needs <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">dry_run=false</span>, <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">confirm=ERASE</span> and a case reference |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">telemetry_endpoint</span> (or <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">telemetry_endpoint_secret</span> in the key's scope), <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">telemetry_key</span> (or <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">telemetry_key_scope</span> + <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">telemetry_key_secret</span>) | optional run reporting to LakeLogic |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">lakelogic_version</span> / <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">lakelogic_wheel</span> | install source (blank = latest from PyPI; a wheel wins) |
+# MAGIC
+# MAGIC Generated by LakeLogic Lakehouse Studio — regenerate, do not hand-edit.
+# MAGIC generated by: LakeLogic Lakehouse Studio
+# MAGIC revision: chv1:d6a403cfb25db38875cf6d9b02ca55f110bb965134c260124966d706cf62f616
+# MAGIC governance seal: sha256:99ab2efa28cd857e17216020566340da8a2bc1029a8ac1822f073f2731e46d9f
+# MAGIC source: estate snapshot snap-8db66a0e80c042cd
+# MAGIC
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 1. Install LakeLogic
+# MAGIC
+# MAGIC Databricks pre-installs the packages named in a <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">%pip</span> cell at session start, so a
+# MAGIC bare <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">lakelogic</span> can report "already satisfied" and silently keep an older build --
+# MAGIC the run then tests the wrong code while looking correct. <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">--upgrade</span> (or an explicit
+# MAGIC <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">==</span>) forces pip to act. <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">restartPython()</span> is required after any <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">%pip</span> install
+# MAGIC before the new version is importable.
+
+# COMMAND ----------
+
+# DBTITLE 1,Resolve install source
+# Declare the parameters (the job passes values for these).
 dbutils.widgets.text("lakelogic_version", "", "LakeLogic version (blank = latest)")
-_wheel = dbutils.widgets.get("lakelogic_wheel").strip()
-# --force-reinstall matters: Databricks pre-installs the packages named in
-# this cell into the notebook environment at session startup, so pip sees the
-# PUBLISHED lakelogic already present. An unreleased wheel carries the SAME
-# version number, so pip reports "already satisfied" and silently keeps the
-# released code - the run then tests the wrong build while looking correct.
+dbutils.widgets.text("lakelogic_wheel", "", "LakeLogic wheel (blank = PyPI)")
+# The extras the design needs: `documents` is added only when it reads PDFs, images or Word.
+dbutils.widgets.text("lakelogic_extras", "synthetic,pdf", "LakeLogic extras")
+
+# Read them.
 _version = dbutils.widgets.get("lakelogic_version").strip()
-# The PyPI branch needs the same protection the wheel branch already had.
-# Databricks PRE-INSTALLS the packages named in this cell at session start,
-# so a bare `lakelogic` is "already satisfied" by whatever version the
-# environment was built with — pip installs nothing and the run silently
-# executes the OLD code. That is exactly how a run on "1.51.0" reproduced a
-# bug fixed in 1.51.0: it was really running the pre-installed 1.50.0, and
-# the null `lakelogic_version` in its telemetry was the only tell.
-# An explicit `==` is unsatisfied by an older pre-install, so pip must act;
-# `--upgrade` covers the unpinned case.
+_wheel = dbutils.widgets.get("lakelogic_wheel").strip()
+_extras = dbutils.widgets.get("lakelogic_extras").strip() or "synthetic,pdf"
+# [synthetic] brings Faker for realistic values; [pdf] reads PDFs for document contracts.
+# A wheel wins over a version. `--force-reinstall` because Databricks pre-installs the
+# packages named in this cell at session start: without it a same-version wheel is
+# "already satisfied" and the run silently executes the PUBLISHED build instead.
 if _wheel:
-    lakelogic_pkg = f"{_wheel} --force-reinstall"
+    # The extras on the wheel path too: a bare wheel installs no extras, and the
+    # synthetic seed needs reportlab to write documents. pip accepts extras on a local
+    # file exactly as it does on a package name.
+    lakelogic_pkg = f"{_wheel}[{_extras}] --force-reinstall"
 elif _version:
-    lakelogic_pkg = f"lakelogic=={_version}"
+    lakelogic_pkg = f"lakelogic[{_extras}]=={_version}"
 else:
-    lakelogic_pkg = "lakelogic --upgrade"
+    lakelogic_pkg = f"lakelogic[{_extras}] --upgrade"
 print(f"Installing LakeLogic from: {lakelogic_pkg}")
 
 # COMMAND ----------
 
-# MAGIC # Only lakelogic is named: pyyaml/polars/deltalake are its own dependencies.
-# MAGIC # pyarrow<25: DBR ships 21.0.0, lakelogic needs >=23.0.1, databricks-connect caps <25.
+# DBTITLE 1,Install LakeLogic
+# MAGIC # pyarrow<25: DBR ships an older pyarrow than lakelogic needs, and
+# MAGIC # databricks-connect caps it below 25. pyyaml/polars/deltalake arrive as
+# MAGIC # lakelogic's own dependencies and are not named here.
 # MAGIC %pip install $lakelogic_pkg "pyarrow<25"
 
 # COMMAND ----------
 
+# DBTITLE 1,Restart Python
 dbutils.library.restartPython()
 
 # COMMAND ----------
 
-# Fail loudly if the engine is not the one asked for. A pinned `pip install lakelogic==X`
-# that cannot be satisfied (e.g. Databricks' PyPI index has not picked up a fresh release)
-# prints an ERROR and the notebook CARRIES ON with the pre-installed version - a run that
-# looks fine while executing old code (seen 2026-10-04: 1.69.0 requested, 1.68.0 ran).
-import lakelogic as _ll
-_want = (dbutils.widgets.get("lakelogic_version") or "").strip()
-if _want and _ll.__version__ != _want:
-    raise RuntimeError(
-        f"LakeLogic {_want} was requested but {_ll.__version__} is installed - the pip install "
-        "failed (see the install cell). Re-run once the release is on Databricks' PyPI index."
-    )
-print(f"LakeLogic {_ll.__version__}")
-
-# COMMAND ----------
-
 # MAGIC %md
-# MAGIC ## ⚙️ Widgets
-
-# COMMAND ----------
-
-dbutils.widgets.removeAll()
-
-# ── Core ──────────────────────────────────────────────────────────────────────
-dbutils.widgets.text("registry_path",
-    "/Volumes/rideflow_dev_platform/nondelta/_contracts/marketplace/rideflow/_system.yaml",
-    "Registry",
-)
-dbutils.widgets.dropdown("environment", "dev", ["dev", "staging", "prod"], "Env")
-dbutils.widgets.text("entity_filter", "", "Entities")
-dbutils.widgets.dropdown("dry_run", "true", ["true", "false"], "Dry Run")
-dbutils.widgets.dropdown("engine", "spark", ["polars", "spark", "pandas"], "Engine")
-
-# ── GDPR Erasure ──────────────────────────────────────────────────────────────
-dbutils.widgets.text("gdpr_column", "", "GDPR Column")
-dbutils.widgets.text("gdpr_ids", "", "GDPR IDs")
-dbutils.widgets.dropdown("gdpr_strategy", "nullify", ["nullify", "hash", "redact"], "GDPR Mode")
-dbutils.widgets.text("gdpr_salt", "", "GDPR Salt")
-dbutils.widgets.text("gdpr_partition_col", "", "GDPR Part.")
-dbutils.widgets.text("gdpr_partition_val", "", "GDPR PVal")
-
-# ── HIPAA Erasure ─────────────────────────────────────────────────────────────
-dbutils.widgets.text("hipaa_column", "", "HIPAA Col")
-dbutils.widgets.text("hipaa_ids", "", "HIPAA IDs")
-dbutils.widgets.dropdown("hipaa_strategy", "nullify", ["nullify", "hash", "redact"], "HIPAA Mode")
-dbutils.widgets.text("hipaa_salt", "", "HIPAA Salt")
-dbutils.widgets.text("hipaa_partition_col", "", "HIPAA Part.")
-dbutils.widgets.text("hipaa_partition_val", "", "HIPAA PVal")
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## 📦 Imports & Config
-
-# COMMAND ----------
-
-try:
-    spark = spark
-except NameError:
-    spark = None
-
-try:
-    dbutils = dbutils
-except NameError:
-    class DBUtilsMock:
-        class WidgetsMock:
-            def get(self, *a, **k): return ""
-        widgets = WidgetsMock()
-    dbutils = DBUtilsMock()
-
-REGISTRY_PATH = dbutils.widgets.get("registry_path").strip()
-
-# ── LakeLogic telemetry: where run logs go (optional) ─────────────────────────
-# Two job/notebook parameters, the same in every pipeline notebook:
-#   telemetry_scope      Databricks secret scope holding `lakelogic-observatory-endpoint`
-#                        and `lakelogic-api-key` (default "rideflow"). Point a quick test at
-#                        another workspace by passing another scope, e.g. "rideflow-stage".
-#   observatory_endpoint Optional URL override (not secret). The API KEY is never a
-#                        parameter: parameters show in the run UI, so it comes from the scope.
-# The _domain.yaml observatory block reads ${LAKELOGIC_OBSERVATORY_ENDPOINT} and
-# ${LAKELOGIC_API_KEY}; this sets them. No scope/keys -> the pipeline runs without telemetry.
-import os as _os
-
-def _param(name, default, label):
-    try:
-        return dbutils.widgets.get(name).strip()
-    except Exception:
-        dbutils.widgets.text(name, default, label)
-        return dbutils.widgets.get(name).strip()
-
-_TELEMETRY_SCOPE = _param("telemetry_scope", "rideflow", "Telemetry - secret scope")
-_ENDPOINT_OVERRIDE = _param("observatory_endpoint", "", "Telemetry - endpoint override (optional)")
-for _env, _key in (("LAKELOGIC_OBSERVATORY_ENDPOINT", "lakelogic-observatory-endpoint"),
-                   ("LAKELOGIC_API_KEY", "lakelogic-api-key")):
-    if _os.environ.get(_env):
-        continue  # a job's spark_env_vars wins
-    try:
-        _os.environ[_env] = dbutils.secrets.get(_TELEMETRY_SCOPE, _key)
-    except Exception:
-        pass
-if _ENDPOINT_OVERRIDE:
-    _os.environ["LAKELOGIC_OBSERVATORY_ENDPOINT"] = _ENDPOINT_OVERRIDE
-print("LakeLogic telemetry:", "ON -> " + _os.environ["LAKELOGIC_OBSERVATORY_ENDPOINT"]
-      if _os.environ.get("LAKELOGIC_OBSERVATORY_ENDPOINT") and _os.environ.get("LAKELOGIC_API_KEY")
-      else f"off (no keys in secret scope '{_TELEMETRY_SCOPE}')")
-ENVIRONMENT = dbutils.widgets.get("environment").strip() or "dev"
-ENTITY_FILTER = dbutils.widgets.get("entity_filter").strip()
-DRY_RUN = dbutils.widgets.get("dry_run").lower() == "true"
-ENGINE = dbutils.widgets.get("engine").strip() or "spark"
-
-# GDPR
-GDPR_COLUMN = dbutils.widgets.get("gdpr_column").strip()
-_gdpr_ids_raw = dbutils.widgets.get("gdpr_ids").strip()
-GDPR_IDS = [v.strip() for v in _gdpr_ids_raw.split(",") if v.strip()] if _gdpr_ids_raw else []
-GDPR_STRATEGY = dbutils.widgets.get("gdpr_strategy").strip() or "nullify"
-GDPR_SALT = dbutils.widgets.get("gdpr_salt").strip()
-GDPR_PARTITION_COL = dbutils.widgets.get("gdpr_partition_col").strip()
-GDPR_PARTITION_VAL = dbutils.widgets.get("gdpr_partition_val").strip()
-
-# HIPAA
-HIPAA_COLUMN = dbutils.widgets.get("hipaa_column").strip()
-_hipaa_ids_raw = dbutils.widgets.get("hipaa_ids").strip()
-HIPAA_IDS = [v.strip() for v in _hipaa_ids_raw.split(",") if v.strip()] if _hipaa_ids_raw else []
-HIPAA_STRATEGY = dbutils.widgets.get("hipaa_strategy").strip() or "nullify"
-HIPAA_SALT = dbutils.widgets.get("hipaa_salt").strip()
-HIPAA_PARTITION_COL = dbutils.widgets.get("hipaa_partition_col").strip()
-HIPAA_PARTITION_VAL = dbutils.widgets.get("hipaa_partition_val").strip()
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## 🗑️ Execute Right-to-Delete
+# MAGIC ## 2. Parameters
 # MAGIC
-# MAGIC Runs privacy erasure passes on all materialized tables matching the
-# MAGIC specified data subject column and IDs.
+# MAGIC Widgets arrive as strings; a job run overrides them per run. One widget per line.
 
 # COMMAND ----------
+
+# DBTITLE 1,Parameters
+# Parameters - the pipeline overrides these per (domain, system). Widgets return STRINGS.
+# Declare the parameters (the job passes values for these).
+dbutils.widgets.text("catalog", "", "catalog")  # the Unity Catalog this run reads and writes
+dbutils.widgets.text("contracts_root", "", "contracts_root")
+dbutils.widgets.text("domain", "lakehouse", "domain")
+dbutils.widgets.text("system", "lakehouse", "system")
+dbutils.widgets.text("environment", "dev", "environment")                 # a key of _system.yaml environments
+dbutils.widgets.text("storage_mode", "catalog", "storage_mode")
+dbutils.widgets.text("subject_column", "", "subject_column")              # the column that identifies a data subject, e.g. rider_id
+dbutils.widgets.text("subject_ids", "", "subject_ids")                    # comma-separated IDs - or use subject_ids_file
+dbutils.widgets.text("subject_ids_file", "", "subject_ids_file")          # a Volume file with one ID per line, e.g. /Volumes/<catalog>/nondelta/lakelogic_logs/requests/r1.txt
+dbutils.widgets.text("strategy", "nullify", "strategy")                   # nullify | hash | redact; used when the contract declares none
+dbutils.widgets.text("hash_salt", "", "hash_salt")                        # used by the hash strategy
+dbutils.widgets.text("entity_filter", "", "entity_filter")                # comma-separated entities; blank = every contract
+dbutils.widgets.text("dry_run", "true", "dry_run")                        # changes data only when dry_run is "false"...
+dbutils.widgets.text("confirm", "", "confirm")                            # ...AND confirm is exactly "ERASE"
+dbutils.widgets.text("case_ref", "", "case_ref")                          # the request this answers, e.g. a ticket id - required to change data
+dbutils.widgets.text("telemetry_endpoint", "", "telemetry_endpoint")      # LakeLogic run-log ingest URL. Empty = do not report.
+dbutils.widgets.text("telemetry_key", "", "telemetry_key")                # LakeLogic API key. Supplied per run, never stored here.
+dbutils.widgets.text("telemetry_key_scope", "", "telemetry_key_scope")    # OR: the Databricks secret SCOPE holding the key
+dbutils.widgets.text("telemetry_key_secret", "", "telemetry_key_secret")  # OR: the secret NAME in that scope. Not a secret itself.
+dbutils.widgets.text("telemetry_endpoint_secret", "", "telemetry_endpoint_secret")  # OR: the secret NAME in that scope holding the ingest URL. Not a secret itself.
+
+# Read them.
+catalog = dbutils.widgets.get("catalog")
+contracts_root = dbutils.widgets.get("contracts_root")
+domain = dbutils.widgets.get("domain")
+system = dbutils.widgets.get("system")
+environment = dbutils.widgets.get("environment")
+storage_mode = dbutils.widgets.get("storage_mode")
+subject_column = dbutils.widgets.get("subject_column")
+subject_ids = dbutils.widgets.get("subject_ids")
+subject_ids_file = dbutils.widgets.get("subject_ids_file")
+strategy = dbutils.widgets.get("strategy")
+hash_salt = dbutils.widgets.get("hash_salt")
+entity_filter = dbutils.widgets.get("entity_filter")
+dry_run = dbutils.widgets.get("dry_run")
+confirm = dbutils.widgets.get("confirm")
+case_ref = dbutils.widgets.get("case_ref")
+telemetry_endpoint = dbutils.widgets.get("telemetry_endpoint")
+telemetry_key = dbutils.widgets.get("telemetry_key")
+telemetry_key_scope = dbutils.widgets.get("telemetry_key_scope")
+telemetry_key_secret = dbutils.widgets.get("telemetry_key_secret")
+telemetry_endpoint_secret = dbutils.widgets.get("telemetry_endpoint_secret")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 3. Telemetry
+# MAGIC
+# MAGIC Reports this run to LakeLogic only when an endpoint and a key are supplied. The key comes from the run parameter or a Databricks secret scope; it is never printed.
+
+# COMMAND ----------
+
+# DBTITLE 1,Configure telemetry
+import os
+# Report this run to LakeLogic if an endpoint and key are supplied.
+# Key: `telemetry_key` (Run dialog, for test runs), or `telemetry_key_scope` + `telemetry_key_secret`
+# (the job run-as identity needs READ on the scope; use this for scheduled runs).
+_telemetry_key = str(telemetry_key).strip()
+_telemetry_source = "run parameter"
+if not _telemetry_key and str(telemetry_key_scope).strip() and str(telemetry_key_secret).strip():
+    try:
+        _telemetry_key = dbutils.secrets.get(
+            str(telemetry_key_scope).strip(), str(telemetry_key_secret).strip()
+        ).strip()
+        _telemetry_source = "secret scope"
+    except Exception as _kv_exc:
+        # Print the exception type only, so no secret is echoed.
+        print(f"Telemetry: could not read the key from the secret scope ({type(_kv_exc).__name__})")
+# Endpoint: `telemetry_endpoint` (a variable or the Run dialog), else `telemetry_endpoint_secret` in the
+# same scope as the key, so a Key Vault-backed scope can hold both and nothing is passed at deploy.
+if not str(telemetry_endpoint).strip() and str(telemetry_key_scope).strip() and str(telemetry_endpoint_secret).strip():
+    try:
+        telemetry_endpoint = dbutils.secrets.get(
+            str(telemetry_key_scope).strip(), str(telemetry_endpoint_secret).strip()
+        )
+    except Exception as _exc:  # noqa: BLE001 - reporting is optional; the run goes on
+        print(f"Telemetry: endpoint secret not readable ({type(_exc).__name__}); not reporting.")
+if str(telemetry_endpoint).strip() and _telemetry_key:
+    os.environ["LAKELOGIC_CLOUD_ENDPOINT"] = str(telemetry_endpoint).strip()
+    os.environ["LAKELOGIC_CLOUD_API_KEY"] = _telemetry_key
+    print(f"Telemetry: reporting to {telemetry_endpoint} (key from {_telemetry_source})")
+else:
+    print("Telemetry: not configured for this run — run logs stay in the lakehouse.")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 4. Load the registry
+# MAGIC
+# MAGIC Resolves <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">{contracts_root}/{domain}/{system}/_system.yaml</span> and the helpers that map each contract to its physical table.
+
+# COMMAND ----------
+
+# DBTITLE 1,Load registry
+import os, json, hashlib, datetime, traceback, uuid
+
+os.environ[f"DATABRICKS_{environment.upper()}_CATALOG"] = catalog
+REGISTRY_PATH = f"{contracts_root}/{domain}/{system}/_system.yaml"
+print(f"Registry: {REGISTRY_PATH}  (env: {environment})")
 
 from lakelogic.core.registry import DomainRegistry
+
+registry = DomainRegistry.from_yaml(REGISTRY_PATH, environment=environment, storage_mode=storage_mode)
+RUN_ID = str(uuid.uuid4())
+
+if "spark" not in dir():
+    raise RuntimeError("No Spark session - run this notebook attached to the lakehouse.")
+
+
+def table_of(contract):
+    """The physical table a contract writes, resolved as SLOValidator resolves it: the
+    contract's own info.table_name under the layer root, else under the domain catalog."""
+    info = (contract.contract_dict or {}).get("info") or {}
+    table = str(info.get("table_name") or "").strip()
+    if not table:
+        return None
+    base = getattr(registry.storage, f"{contract.layer}_root", None) or getattr(
+        registry.storage, "domain_catalog", None
+    )
+    return f"{base}.{table}".replace("`", "") if base else None
+
+
+def exists(table):
+    try:
+        return bool(spark.catalog.tableExists(table))  # noqa: F821 - Databricks injects spark
+    except Exception:
+        return False
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 5. Evidence table
+# MAGIC
+# MAGIC The engine owns the evidence table: its name, schema and location beside the domain's <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">lakelogic_run_log</span>.
+
+# COMMAND ----------
+
+# DBTITLE 1,Resolve evidence table
+from lakelogic.core.evidence_tables import resolve_evidence_target, write_evidence_rows
+
+# The engine owns the evidence table: its name (`lakelogic_erasure_evidence`), its schema,
+# and its place - beside the run log this system declares in `_system.yaml`
+# (`metadata.run_log_table`), i.e. in the domain schema next to `lakelogic_run_log`.
+_run_log_table = str((getattr(registry, "metadata", None) or {}).get("run_log_table") or "")
+if not _run_log_table or "{" in _run_log_table:
+    _run_log_table = f"{registry.storage.domain_catalog}.lakelogic_run_log"
+EVIDENCE_METADATA = {"run_log_table": _run_log_table, "run_log_backend": "spark"}
+_target = resolve_evidence_target("erasure_evidence", EVIDENCE_METADATA, engine_name="spark")
+EVIDENCE_TABLE = _target[1] if _target else None
+print(f"Erasure evidence: {EVIDENCE_TABLE}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 6. Plan or apply the erasure
+# MAGIC
+# MAGIC Changes data only with <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">dry_run = "false"</span> and <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">confirm = "ERASE"</span>. Evidence carries counts and a digest, never a subject ID.
+
+# COMMAND ----------
+
+# DBTITLE 1,Run erasure
+import importlib.metadata
+
+from lakelogic.core.gdpr import _get_pii_column_names
+from lakelogic.core.models import DataContract
 from lakelogic.pipeline import LakehousePipeline
 
-# Explicit IDs win; with none given, the request table is the source.
-QUEUE_MODE = not GDPR_IDS and not HIPAA_IDS
+DRY_RUN = str(dry_run).strip().lower() != "false"
+CONFIRMED = str(confirm).strip() == "ERASE"
+EXECUTE = (not DRY_RUN) and CONFIRMED
+MODE = "executed" if EXECUTE else ("refused_unconfirmed" if not DRY_RUN else "dry_run")
+# Changing data requires case_ref, so evidence links to the request. Dry runs do not.
+CASE_REF = str(case_ref).strip()
+if EXECUTE and not CASE_REF:
+    raise Exception('dry_run is "false" and confirm is "ERASE", but case_ref is empty - '
+                    "set the request reference this erasure answers. Nothing was changed.")
+CASE_REF = CASE_REF or f"dry-run-{RUN_ID}"
+COLUMN = str(subject_column).strip()
+REQUESTED = str(strategy).strip().lower() or "nullify"
 
+ids = [s.strip() for s in str(subject_ids).split(",") if s.strip()]
+if str(subject_ids_file).strip():
+    _path = str(subject_ids_file).strip()
+    if not _path.startswith("/"):
+        raise Exception(
+            f"subject_ids_file must be an absolute path (a Unity Catalog Volume, e.g. "
+            f"/Volumes/<catalog>/nondelta/lakelogic_logs/requests/r1.txt). Got: {_path}"
+        )
+    with open(_path, encoding="utf-8") as fh:
+        ids += [line.strip() for line in fh if line.strip()]
+ids = sorted(set(ids))
+# Neither the evidence table nor LakeLogic receives the IDs: only the count and this digest
+# (printed below), which lets the request's own ID list be matched to this run.
+SUBJECTS_SHA256 = hashlib.sha256("\n".join(ids).encode("utf-8")).hexdigest() if ids else None
+WANTED = {e.strip().lower() for e in str(entity_filter).split(",") if e.strip()}
+
+print(f"Right to Erasure {domain}/{system}: column={COLUMN!r} subjects={len(ids)} mode={MODE}")
+pipeline = LakehousePipeline(registry, engine="spark", spark=spark)  # noqa: F821
 try:
-    if not QUEUE_MODE and not GDPR_COLUMN and not HIPAA_COLUMN:
-        print("⚠️ IDs given but no GDPR column or HIPAA column — nothing to erase.")
-        print("   Set 'GDPR Column' + 'GDPR IDs' or 'HIPAA Col' + 'HIPAA IDs' to proceed.")
-    else:
-        print(f"Loading Registry: {REGISTRY_PATH} (env: {ENVIRONMENT})")
-        # Catalog derived from the registry Volume path — the same derivation the
-        # pipeline driver uses, so `{catalog}` resolves to the tables it wrote.
-        import os
-        _derived_catalog = "rideflow_dev_platform"
-        if REGISTRY_PATH.startswith("/Volumes/"):
-            _parts = REGISTRY_PATH.split("/")
-            if len(_parts) > 2 and _parts[2]:
-                _derived_catalog = _parts[2]
-        os.environ.setdefault(f"RIDEFLOW_{ENVIRONMENT.upper()}_CATALOG", _derived_catalog)
-        print(f"Catalog: {_derived_catalog}")
-        registry = DomainRegistry.from_yaml(REGISTRY_PATH, environment=ENVIRONMENT, storage_mode="uc")
+    LAKELOGIC_VERSION = importlib.metadata.version("lakelogic")
+except Exception:
+    LAKELOGIC_VERSION = None
 
-        pipeline = LakehousePipeline(registry, engine=ENGINE, spark=spark)
 
-        if QUEUE_MODE:
-            # Requests are rows in _lakelogic_erasure_requests (see README → Privacy).
-            # Subject ids are never printed: the request id is the reference.
-            print(f"\n📥 Erasure requests (dry run: {DRY_RUN})")
-            outcomes = pipeline.process_erasure_requests(
-                dry_run=DRY_RUN,
-                entity_filter=ENTITY_FILTER,
-                gdpr_strategy=GDPR_STRATEGY,
-                gdpr_salt=GDPR_SALT,
-                hipaa_strategy=HIPAA_STRATEGY,
-                hipaa_salt=HIPAA_SALT,
-            )
-            if not outcomes:
-                print("   No open requests for this system.")
-            for request_id, status in outcomes.items():
-                print(f"   {request_id}: {status}")
-            if any(s == "failed" for s in outcomes.values()):
-                raise RuntimeError("One or more erasure requests failed — see the statuses above.")
+def matching(table, where=""):
+    quoted = ", ".join("'" + i.replace("'", "''") + "'" for i in ids)
+    sql = f"SELECT COUNT(*) AS n FROM {table} WHERE `{COLUMN}` IN ({quoted}){where}"
+    return spark.sql(sql).first()["n"]  # noqa: F821
 
-        if not QUEUE_MODE and GDPR_COLUMN and GDPR_IDS:
-            print(f"\n🔒 GDPR Erasure")
-            print(f"   Column   : {GDPR_COLUMN}")
-            print(f"   IDs      : {len(GDPR_IDS)} subject(s)")
-            print(f"   Strategy : {GDPR_STRATEGY}")
-            print(f"   Dry run  : {DRY_RUN}")
 
-            all_active = registry.get_active_contracts()
-            if ENTITY_FILTER:
-                entities = {e.strip().lower() for e in ENTITY_FILTER.split(",") if e.strip()}
-                all_active = [c for c in all_active if c.entity.lower() in entities]
+evidence, unresolved = [], []
+if not (COLUMN and ids):
+    print("Nothing to erase: set subject_column and subject_ids (or subject_ids_file).")
+else:
+    for c in registry.get_active_contracts():
+        if WANTED and c.entity.lower() not in WANTED:
+            continue
+        dc = DataContract(**(c.contract_dict or {}))
+        pii = sorted(_get_pii_column_names(dc) or [])
+        fields = {f.name for f in (dc.model.fields if dc.model else [])}
+        if not pii or COLUMN not in fields:
+            continue
+        table = table_of(c)
+        effective = pipeline._resolve_erasure_strategy(c.contract_dict, REQUESTED)
+        row = {
+            "run_id": RUN_ID, "recorded_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "domain": domain, "system": system, "environment": environment, "entity": c.entity,
+            "table": table, "subject_column": COLUMN, "subject_count": len(ids),
+            "subjects_sha256": SUBJECTS_SHA256, "strategy": effective, "pii_columns": pii,
+            "mode": MODE, "case_ref": CASE_REF, "lakelogic_version": LAKELOGIC_VERSION,
+        }
+        if not (table and exists(table)):
+            row["outcome"] = "table_not_found"
+            evidence.append(row)
+            continue
+        row["matched_rows"] = matching(table)
+        if MODE == "refused_unconfirmed":
+            row["outcome"] = "not_run"
+        else:
+            try:
+                # Pass case_ref only if lakelogic supports it; older versions erase without reporting.
+                import inspect as _inspect
 
-            gdpr_partition = (
-                {"column": GDPR_PARTITION_COL, "value": GDPR_PARTITION_VAL}
-                if GDPR_PARTITION_COL else None
-            )
+                _gdpr_kwargs = (
+                    {"case_ref": CASE_REF}
+                    if "case_ref" in _inspect.signature(pipeline._execute_gdpr_pass).parameters else {}
+                )
+                if not _gdpr_kwargs:
+                    print("  this lakelogic does not report privacy evidence - upgrade to send it to LakeLogic")
+                pipeline._execute_gdpr_pass([c], COLUMN, ids, REQUESTED, str(hash_salt), not EXECUTE, **_gdpr_kwargs)
+                row["engine_report_file"] = "written"
+            except OSError as exc:
+                # The report file path is Databricks-only; the change already ran and is recorded here.
+                row["engine_report_file"] = f"not written ({type(exc).__name__})"
+            row["outcome"] = "planned" if not EXECUTE else "applied"
+            if EXECUTE and effective in ("nullify", "redact"):
+                cols = [p for p in pii if p != COLUMN]
+                if effective == "nullify":
+                    still = " OR ".join(f"`{p}` IS NOT NULL" for p in cols)
+                else:
+                    still = " OR ".join(f"CAST(`{p}` AS STRING) <> '***REDACTED***'" for p in cols)
+                remaining = matching(table, f" AND ({still})") if still else 0
+                row["rows_still_holding_values"] = remaining
+                if remaining:
+                    row["outcome"] = "incomplete"
+                    unresolved.append((c.entity, remaining))
+        evidence.append(row)
+        print(f"  {c.entity:<45} {row['outcome']:<16} matched={row.get('matched_rows')} strategy={effective}")
 
-            pipeline._execute_gdpr_pass(
-                all_active,
-                GDPR_COLUMN,
-                GDPR_IDS,
-                GDPR_STRATEGY,
-                GDPR_SALT,
-                DRY_RUN,
-                partition_filter=gdpr_partition,
-            )
-            print("   ✅ GDPR erasure complete.")
-
-        if not QUEUE_MODE and HIPAA_COLUMN and HIPAA_IDS:
-            print(f"\n🏥 HIPAA Erasure")
-            print(f"   Column   : {HIPAA_COLUMN}")
-            print(f"   IDs      : {len(HIPAA_IDS)} subject(s)")
-            print(f"   Strategy : {HIPAA_STRATEGY}")
-            print(f"   Dry run  : {DRY_RUN}")
-
-            all_active = registry.get_active_contracts()
-            if ENTITY_FILTER:
-                entities = {e.strip().lower() for e in ENTITY_FILTER.split(",") if e.strip()}
-                all_active = [c for c in all_active if c.entity.lower() in entities]
-
-            hipaa_partition = (
-                {"column": HIPAA_PARTITION_COL, "value": HIPAA_PARTITION_VAL}
-                if HIPAA_PARTITION_COL else None
-            )
-
-            pipeline._execute_hipaa_pass(
-                all_active,
-                HIPAA_COLUMN,
-                HIPAA_IDS,
-                HIPAA_STRATEGY,
-                HIPAA_SALT,
-                DRY_RUN,
-                partition_filter=hipaa_partition,
-            )
-            print("   ✅ HIPAA erasure complete.")
-
-        print("\n" + "=" * 70)
-        print("RIGHT-TO-DELETE COMPLETE")
-        print("=" * 70)
-
-except Exception as e:
-    print(f"\n❌ Right-to-delete failed: {e}")
-    raise
+print(f"Subjects digest (sha256): {SUBJECTS_SHA256}  case_ref: {CASE_REF}  mode: {MODE}")
+_now = datetime.datetime.now(datetime.timezone.utc)
+_engine_rows = [{
+    "run_id": RUN_ID, "timestamp": _now, "profile": "gdpr", "dataset": r["entity"],
+    "table_name": r["table"], "subject_count": r["subject_count"],
+    "rows_affected": r.get("matched_rows"), "reason": f"{MODE}:{CASE_REF}",
+    "status": r["outcome"], "contract": r["entity"], "contract_version": None,
+    "domain": domain, "system": system,
+} for r in evidence]
+written_to = write_evidence_rows("erasure_evidence", _engine_rows, EVIDENCE_METADATA, engine_name="spark")
+if _engine_rows and not written_to:
+    raise Exception(f"Erasure evidence was NOT recorded in {EVIDENCE_TABLE} - see the warning above.")
+print(f"Recorded {len(_engine_rows) if written_to else 0} row(s) in {written_to or EVIDENCE_TABLE}.")
+if MODE == "refused_unconfirmed":
+    raise Exception('dry_run is "false" but confirm is not exactly "ERASE" - nothing was changed.')
+if unresolved:
+    raise Exception(f"Erasure incomplete - personal data still present: {unresolved}")

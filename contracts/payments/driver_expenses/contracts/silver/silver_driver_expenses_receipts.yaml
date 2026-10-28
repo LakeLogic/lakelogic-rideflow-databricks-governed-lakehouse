@@ -1,0 +1,105 @@
+version: 1.0.0
+
+info:
+  title: Silver — Driver Expenses Receipts
+  target_layer: silver
+  table_name: '{silver_layer}_driver_expenses_receipts'
+  system: driver_expenses
+  domain: payments
+
+model:
+  fields:
+  - name: file_path
+    type: string
+    required: false
+    description: Column 'file_path' projected from source table 'driver_expenses_receipts',
+      typed as string.
+  - name: merchant
+    type: string
+    required: false
+    description: Column 'merchant' projected from source table 'driver_expenses_receipts',
+      typed as string.
+  - name: branch_city_code
+    type: string
+    required: false
+    description: Column 'branch_city_code' projected from source table 'driver_expenses_receipts',
+      typed as string.
+  - name: receipt_date
+    type: date
+    required: false
+    description: Column 'receipt_date' projected from source table 'driver_expenses_receipts',
+      typed as date.
+  - name: receipt_time
+    type: timestamp
+    required: false
+    description: Column 'receipt_time' projected from source table 'driver_expenses_receipts',
+      typed as timestamp.
+  - name: receipt_number
+    type: string
+    required: false
+    description: Column 'receipt_number' projected from source table 'driver_expenses_receipts',
+      typed as string.
+  - name: service
+    type: string
+    required: false
+    description: Column 'service' projected from source table 'driver_expenses_receipts',
+      typed as string.
+  - name: total_amount
+    type: decimal(10,2)
+    required: false
+    description: Column 'total_amount' projected from source table 'driver_expenses_receipts',
+      typed as decimal(10,2).
+  - name: vat_amount
+    type: decimal(10,2)
+    required: false
+    description: Column 'vat_amount' projected from source table 'driver_expenses_receipts',
+      typed as decimal(10,2).
+  - name: card_last4
+    type: string
+    required: false
+    sensitive: true
+    classification: financial_account
+    description: Column 'card_last4' projected from source table 'driver_expenses_receipts',
+      typed as string. Confidential (financial_account), not masked.
+  - name: driver_id
+    type: string
+    required: true
+    description: Column 'driver_id' projected from source table 'driver_expenses_receipts',
+      typed as string.
+
+materialization:
+  strategy: overwrite
+
+quality:
+  row_rules:
+  - name: driver_id_not_null
+    sql: driver_id IS NOT NULL
+    category: completeness
+    description: driver_id is always present (never null).
+  - name: total_amount_range_min
+    sql: total_amount IS NULL OR total_amount >= 0
+    category: validity
+    description: total_amount is at least 0 when present.
+  - name: total_amount_range_max
+    sql: total_amount IS NULL OR total_amount <= 1000000
+    category: validity
+    description: total_amount is at most 1000000 when present.
+  - name: vat_amount_range_min
+    sql: vat_amount IS NULL OR vat_amount >= 0
+    category: validity
+    description: vat_amount is at least 0 when present.
+  - name: vat_amount_range_max
+    sql: vat_amount IS NULL OR vat_amount <= 1000000
+    category: validity
+    description: vat_amount is at most 1000000 when present.
+
+dataset: silver_driver_expenses_receipts
+
+source:
+  type: table
+  path: table:{bronze_root}.{bronze_layer}_driver_expenses_receipts
+  load_mode: incremental
+  watermark_field: _lakelogic_processed_at
+
+metadata:
+  run_log_table: '{domain_catalog}.lakelogic_run_log'

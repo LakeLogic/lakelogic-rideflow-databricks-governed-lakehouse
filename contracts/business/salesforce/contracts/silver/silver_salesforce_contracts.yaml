@@ -1,0 +1,109 @@
+version: 1.0.0
+
+info:
+  title: Silver — Salesforce Contracts
+  target_layer: silver
+  table_name: '{silver_layer}_salesforce_contracts'
+  system: salesforce
+  domain: business
+
+model:
+  fields:
+  - name: attributes
+    type: json
+    required: false
+    description: Column 'attributes' projected from source table 'salesforce_contracts',
+      typed as json.
+  - name: Id
+    type: string
+    required: true
+    description: Business key 'Id' (from source table 'salesforce_contracts'), typed
+      as string.
+  - name: AccountId
+    type: string
+    required: false
+    description: Column 'AccountId' projected from source table 'salesforce_contracts',
+      typed as string.
+  - name: ContractNumber
+    type: string
+    required: false
+    description: Column 'ContractNumber' projected from source table 'salesforce_contracts',
+      typed as string.
+  - name: Status
+    type: string
+    required: true
+    description: Column 'Status' projected from source table 'salesforce_contracts',
+      typed as string.
+  - name: StartDate
+    type: date
+    required: false
+    description: Column 'StartDate' projected from source table 'salesforce_contracts',
+      typed as date.
+  - name: ContractTerm
+    type: Int64
+    required: false
+    description: Column 'ContractTerm' projected from source table 'salesforce_contracts',
+      typed as Int64.
+  - name: EndDate
+    type: date
+    required: false
+    description: Column 'EndDate' projected from source table 'salesforce_contracts',
+      typed as date.
+  - name: RideFlow_Monthly_Commit__c
+    type: Float64
+    required: false
+    description: Column 'RideFlow_Monthly_Commit__c' projected from source table 'salesforce_contracts',
+      typed as Float64.
+  - name: CreatedDate
+    type: timestamp
+    required: false
+    description: Column 'CreatedDate' projected from source table 'salesforce_contracts',
+      typed as timestamp.
+  - name: LastModifiedDate
+    type: timestamp
+    required: false
+    description: Column 'LastModifiedDate' projected from source table 'salesforce_contracts',
+      typed as timestamp.
+  - name: SystemModstamp
+    type: timestamp
+    required: false
+    description: Column 'SystemModstamp' projected from source table 'salesforce_contracts',
+      typed as timestamp.
+  - name: IsDeleted
+    type: boolean
+    required: false
+    description: Column 'IsDeleted' projected from source table 'salesforce_contracts',
+      typed as boolean.
+
+primary_key:
+- Id
+
+quality:
+  row_rules:
+  - name: Id_not_null
+    sql: Id IS NOT NULL
+    category: completeness
+    description: id is always present (never null).
+  - name: Status_not_null
+    sql: Status IS NOT NULL
+    category: completeness
+    description: status is always present (never null).
+
+transformations:
+- deduplicate:
+    by:
+    - Id
+    sort_by:
+    - LastModifiedDate
+    order: desc
+
+dataset: silver_salesforce_contracts
+
+source:
+  type: table
+  path: table:{bronze_root}.{bronze_layer}_salesforce_contracts
+  load_mode: incremental
+  watermark_field: _lakelogic_processed_at
+
+metadata:
+  run_log_table: '{domain_catalog}.lakelogic_run_log'

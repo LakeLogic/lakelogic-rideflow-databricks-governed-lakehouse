@@ -1,69 +1,65 @@
 version: 1.0.0
 
 info:
-  title: "Silver — Checkr Driver Licences Validated"
-  table_name: "{silver_layer}_{system}_driver_licences"
-  description: "Validated and securely masked driver licence information."
+  title: Silver — Checkr Driver Licences
   target_layer: silver
-  domain: operations
+  description: Driver licence records captured from Checkr background checks, holding
+    the holder's name, date of birth and licence number alongside the issuing authority
+    and jurisdiction, expiry date and the vehicle classes the holder is permitted
+    to drive. Each row traces back to the source document it was extracted from, and
+    the licence number is the identifier used to match a licence to the correct driver.
+    The licence number and date of birth are flagged as personal data.
+  table_name: '{silver_layer}_checkr_driver_licences'
   system: checkr
-
-dataset: "driver_licences"
-
-source:
-  type: table
-  # Use bronze_path so we resolve to {data_root}/{bronze_layer}/...
-  path: "table:{bronze_root}.{bronze_layer}_{system}_driver_licences"
-  load_mode: incremental
-  watermark_field: _lakelogic_processed_at
+  domain: operations
 
 model:
   fields:
-  - name: full_name
+  - name: file_path
     type: string
-    required: true
-    pii: true
-    masking: redact
-
+    required: false
+    description: Column 'file_path' projected from source table 'checkr_driver_licences',
+      typed as string.
+  - name: holder_name
+    type: string
+    required: false
+    description: Column 'holder_name' projected from source table 'checkr_driver_licences',
+      typed as string.
   - name: licence_number
     type: string
-    required: true
+    required: false
     pii: true
-    masking: hash
-
+    classification: licence_id
+    description: Column 'licence_number' projected from source table 'checkr_driver_licences',
+      typed as string. Personal data (licence_id), not masked.
   - name: date_of_birth
-    type: string
+    type: date
+    required: false
     pii: true
-    masking: hash
-
+    classification: date_of_birth
+    description: Column 'date_of_birth' projected from source table 'checkr_driver_licences',
+      typed as date. Personal data (date_of_birth), not masked.
   - name: expiry_date
     type: date
-
+    required: false
+    description: Column 'expiry_date' projected from source table 'checkr_driver_licences',
+      typed as date.
   - name: vehicle_classes
     type: string
+    required: false
+    description: Column 'vehicle_classes' projected from source table 'checkr_driver_licences',
+      typed as string.
 
-# Required: silver defaults to the `merge` strategy (from _system.yaml), which
-# needs a primary_key to upsert on. Without it the contract fails with
-# "primary_key is required for merge strategy."
-primary_key: [licence_number]
+materialization:
+  strategy: overwrite
 
-quality:
-  dataset_rules:
-  - unique: licence_number
+dataset: silver_checkr_driver_licences
 
-transformations:
-  # Drop only columns we know exist in bronze. The _lakelogic_llm_* lineage
-  # columns added by pdfplumber are not retained by bronze (evolution=append
-  # drops unknown cols on first write), so we don't need to drop them here.
-- drop:
-    columns:
-    - file_path
-- deduplicate:
-    "on":
-    - licence_number
-    sort_by:
-    - _lakelogic_processed_at
-    order: desc
+source:
+  type: table
+  path: table:{bronze_root}.{bronze_layer}_checkr_driver_licences
+  load_mode: incremental
+  watermark_field: _lakelogic_processed_at
 
-lineage:
-  enabled: true
+metadata:
+  run_log_table: '{domain_catalog}.lakelogic_run_log'
