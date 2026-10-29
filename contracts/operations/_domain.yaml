@@ -93,6 +93,13 @@ observatory:
 
 # ── Compliance & Privacy ─────────────────────────────────────────────────────
 compliance:
+  frameworks:
+    gdpr:
+      applicable: true
+      jurisdiction: EU/EEA
+      legal_basis: legal_obligation
+      special_category_data: false
+      dpia_required: false
   sensitivity: Restricted
   purpose: "Driver onboarding, background checks, safety incidents and support operations."
   erasure:

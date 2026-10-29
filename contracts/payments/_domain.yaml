@@ -91,6 +91,13 @@ observatory:
 
 # ── Compliance & Privacy ─────────────────────────────────────────────────────
 compliance:
+  frameworks:
+    gdpr:
+      applicable: true
+      jurisdiction: EU/EEA
+      legal_basis: contract
+      special_category_data: false
+      dpia_required: false
   sensitivity: Confidential
   purpose: "Payments, refunds, payouts and driver expenses: revenue and reconciliation."
   erasure:

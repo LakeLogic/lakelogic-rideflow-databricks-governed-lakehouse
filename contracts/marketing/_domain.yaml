@@ -91,6 +91,13 @@ observatory:
 
 # ── Compliance & Privacy ─────────────────────────────────────────────────────
 compliance:
+  frameworks:
+    gdpr:
+      applicable: true
+      jurisdiction: EU/EEA
+      legal_basis: legitimate_interest
+      special_category_data: false
+      dpia_required: false
   sensitivity: Confidential
   purpose: "Campaign, ads and email engagement data: measures rider acquisition and retention."
   erasure:
