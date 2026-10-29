@@ -5,12 +5,45 @@
 # source: estate snapshot snap-8db66a0e80c042cd
 domain: business
 
+# ── Domain Ownership ────────────────────────────────────────────────────────
+ownership:
+  domain_owner: "Revenue Operations"
+  team: revenue_operations
+  contacts:
+  - name: Revenue Operations Data Lead
+    role: oncall
+    email: revenue-ops-data@rideflow.com
+  cost_center: revenue_operations
+  jira_project: REVOPS
+
+# ── Compliance & Privacy ─────────────────────────────────────────────────────
+# Salesforce holds B2B customer contacts (names, emails, phones): personal data processed to
+# perform the customer contract.
+compliance:
+  sensitivity: Confidential
+  purpose: "Customer accounts, contacts, opportunities, contracts and cases: B2B sales and support."
+  risk_level: medium
+  risk_triggers: [pii]
+  dpo_review_required: false
+  frameworks:
+    gdpr:
+      applicable: true
+      jurisdiction: EU/EEA
+      legal_basis: contract
+      special_category_data: false
+      dpia_required: false
+  data_residency: EU
+  erasure:
+    strategy: nullify
+
+# Layer aliases
 bronze_layer: bronze
 
 silver_layer: silver
 
 gold_layer: gold
 
+# Hold period per layer (Lakehouse Studio).
 retention:
   bronze: P7D
   silver: P90D
