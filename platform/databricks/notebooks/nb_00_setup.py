@@ -105,6 +105,7 @@ dbutils.widgets.text("catalog", "", "catalog")  # the Unity Catalog to provision
 dbutils.widgets.text("contracts_root", "", "contracts_root")
 dbutils.widgets.text("volume_schema", "nondelta", "volume_schema")        # schema holding the file Volumes
 dbutils.widgets.text("catalog_storage_root", "", "catalog_storage_root")  # MANAGED LOCATION root for a catalog created here; blank = the metastore's
+dbutils.widgets.text("landing_storage_root", "", "landing_storage_root")  # EXTERNAL storage for the landing Volumes: <root>/landing_<domain>; blank = managed (empty)
 dbutils.widgets.text("landing_runtime", "", "landing_runtime")  # where landing files come from (Deliver data-source step); blank = the registry's own path
 
 # Read them.
@@ -113,6 +114,7 @@ catalog = dbutils.widgets.get("catalog")
 contracts_root = dbutils.widgets.get("contracts_root")
 volume_schema = dbutils.widgets.get("volume_schema")
 catalog_storage_root = dbutils.widgets.get("catalog_storage_root")
+landing_storage_root = dbutils.widgets.get("landing_storage_root").strip().rstrip("/")
 landing_runtime = dbutils.widgets.get("landing_runtime")
 
 # COMMAND ----------
@@ -384,6 +386,7 @@ try:
     # which is what makes everything created below match the contracts exactly — one
     # catalog with a schema per domain, or a catalog per domain with a schema per layer.
     roots, registries = [], []
+    landing_domain = {}  # landing root -> its domain, for an external landing Volume's path
     for system_yaml in _system_yamls():
         try:
             registry = DomainRegistry.from_yaml(
@@ -396,6 +399,8 @@ try:
         for root in (registry.storage.landing_root, registry.storage.log_root):
             if str(root or "").strip():
                 roots.append(str(root).strip())
+        if str(registry.storage.landing_root or "").strip():
+            landing_domain[str(registry.storage.landing_root).strip()] = registry.domain
 
     if not registries:
         raise RuntimeError(
@@ -475,6 +480,14 @@ try:
         if len(parts) >= 4 and parts[0] == "Volumes":
             _, cat, schema, vol = parts[:4]
             _sql(f"CREATE SCHEMA IF NOT EXISTS `{cat}`.`{schema}`")
+            if landing_storage_root and root in landing_domain:
+                # The landing files live on the source's own storage (an external location):
+                # a managed Volume here would be empty and every pipeline would read nothing.
+                # Rebuilt from scratch (2026-10-29), the hand-made external Volumes were the gap.
+                location = f"{landing_storage_root}/landing_{landing_domain[root]}"
+                _sql(f"CREATE EXTERNAL VOLUME IF NOT EXISTS `{cat}`.`{schema}`.`{vol}` LOCATION '{location}'")
+                print(f"  ok {root} -> {location} (external, read by the pipelines)")
+                continue
             _sql(f"CREATE VOLUME IF NOT EXISTS `{cat}`.`{schema}`.`{vol}`")
         else:
             # Remote landing storage (external location / direct connection) belongs to the

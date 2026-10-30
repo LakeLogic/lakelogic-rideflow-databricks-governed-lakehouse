@@ -35,6 +35,7 @@ resources:
             environment: ${bundle.target}
             volume_schema: nondelta
             catalog_storage_root: ${var.catalog_storage_root}
+            landing_storage_root: ${var.landing_storage_root}
             telemetry_endpoint: '{{job.parameters.telemetry_endpoint}}'
             telemetry_key: '{{job.parameters.telemetry_key}}'
             telemetry_key_scope: '{{job.parameters.telemetry_key_scope}}'

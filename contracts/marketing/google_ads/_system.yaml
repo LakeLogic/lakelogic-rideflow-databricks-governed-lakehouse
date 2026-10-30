@@ -86,3 +86,9 @@ contracts:
   enabled: true
   depends_on:
   - silver_google_ads_campaigns
+- layer: gold
+  entity: gold_agg_acquisition_roi
+  path: contracts/gold/gold_agg_acquisition_roi.yaml
+  enabled: true
+  depends_on:
+  - silver_google_ads_campaigns

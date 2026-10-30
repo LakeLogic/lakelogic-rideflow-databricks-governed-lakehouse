@@ -17,6 +17,10 @@ variables:
     description: 'The catalog prefix: each domain''s catalog is <prefix>_<domain>
       (from the deployment target).'
     default: rideflow_dev
+  landing_storage_root:
+    description: External storage the landing Volumes read (<root>/landing_<domain>). Blank =
+      managed Volumes, which start empty.
+    default: ''
   catalog_storage_root:
     description: Storage location for a catalog setup creates (MANAGED LOCATION <root>/<catalog>).
       Blank = the metastore's own storage.
@@ -62,6 +66,11 @@ targets:
     default: true
     variables:
       catalog: rideflow_dev
+      # The metastore has no storage root, so a catalog setup creates needs a location. The six
+      # domain catalogs live here (created 2026-10-27 with this root passed by hand, never saved,
+      # so the next new catalog - rideflow_dev_shared - failed). Kept here so every run uses it.
+      landing_storage_root: abfss://landing@salakelogicdatastore.dfs.core.windows.net
+      catalog_storage_root: abfss://unity-catalog-storage@dbstoragegjbcqqdws2r4o.dfs.core.windows.net/7405615991211788/catalogs
       lakelogic_version: 1.85.1
       lakelogic_wheel: ''
       telemetry_key_scope: ''
