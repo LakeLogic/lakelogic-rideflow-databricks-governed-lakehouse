@@ -1,0 +1,91 @@
+version: 1.0.0
+
+info:
+  title: Bronze — Salesforce Accounts
+  target_layer: bronze
+  table_name: '{bronze_layer}_salesforce_accounts'
+  domain: business
+  system: salesforce
+
+model:
+  fields:
+  - name: attributes
+    type: json
+    description: Observed json column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_accounts.
+  - name: Id
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_accounts.
+  - name: Name
+    type: string
+    pii: true
+    classification: person_name
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_accounts. Personal data (person_name),
+      not masked.
+  - name: Type
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_accounts.
+  - name: Industry
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_accounts.
+  - name: BillingCity
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_accounts.
+  - name: BillingCountry
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_accounts.
+  - name: NumberOfEmployees
+    type: Int64
+    description: Observed Int64 column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_accounts.
+  - name: AnnualRevenue
+    type: Float64
+    description: Observed Float64 column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_accounts.
+  - name: OwnerId
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_accounts.
+  - name: RideFlow_Account_Code__c
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_accounts.
+  - name: CreatedDate
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_accounts.
+  - name: LastModifiedDate
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_accounts.
+  - name: SystemModstamp
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_accounts.
+  - name: IsDeleted
+    type: boolean
+    description: Observed boolean column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_accounts.
+
+source:
+  type: landing
+  path: '{landing_root}/accounts'
+  format: json
+  partition:
+    format: y_%Y/m_%m/d_%d
+  load_mode: incremental
+  watermark_strategy: pipeline_log
+
+primary_key:
+- Id
+
+metadata:
+  run_log_table: '{domain_catalog}.lakelogic_run_log'
+
+dataset: bronze_salesforce_accounts

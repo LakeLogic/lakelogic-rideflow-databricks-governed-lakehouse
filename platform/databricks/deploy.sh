@@ -7,13 +7,13 @@
 # "workspace_id mismatch". This wrapper detects that one error, clears the stale
 # state for the target, and redeploys — so you never have to do it by hand.
 #
-# Usage:   ./deploy.sh                 # target=dev, profile=rideflow_dev
+# Usage:   ./deploy.sh                 # target=dev, profile=DEFAULT
 #          ./deploy.sh dev my_profile
 set -uo pipefail
 cd "$(dirname "$0")"
 
 TARGET="${1:-dev}"
-PROFILE="${2:-rideflow_dev}"
+PROFILE="${2:-DEFAULT}"
 
 out=$(databricks bundle deploy -t "$TARGET" -p "$PROFILE" 2>&1); code=$?
 echo "$out"

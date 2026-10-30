@@ -1,11 +1,14 @@
 version: 1.0.0
 
 info:
-  title: "Bronze — HubSpot Email Campaigns"
-  table_name: "{bronze_layer}_{system}_email_campaigns"
-  description: >
-    Raw email campaign send and engagement data from HubSpot.
+  title: Bronze — Hubspot Email Campaigns
   target_layer: bronze
+  description: Per-recipient records of email marketing campaigns sent through Hubspot,
+    capturing who was mailed, the campaign and subject line, and when each message
+    was sent. Engagement is tracked through open and click timestamps, alongside bounce
+    and unsubscribe flags that signal list health and deliverability. Recipient email
+    addresses and names are personal contact data.
+  table_name: '{bronze_layer}_hubspot_email_campaigns'
   domain: marketing
   system: hubspot
 
@@ -13,56 +16,61 @@ model:
   fields:
   - name: campaign_id
     type: string
-    description: "HubSpot campaign ID"
+    description: Unique identifier for the email campaign this record belongs to.
+      Used to group and compare performance across campaigns.
   - name: recipient_email
     type: string
     pii: true
-    description: "Recipient email address"
+    classification: email
+    description: Email address of the person who received the campaign. Personal contact
+      data used for delivery and engagement tracking.
   - name: recipient_name
     type: string
-    pii: true
-    description: "Recipient display name"
+    description: Name of the person who received the campaign. Helps personalize reporting
+      and identify who engaged.
   - name: campaign_name
     type: string
-    description: "Campaign name"
+    description: Human-readable name of the email campaign. Makes it easy to recognize
+      and report on campaigns.
   - name: subject_line
     type: string
-    description: "Email subject line"
+    description: The subject line shown in the recipient's inbox. Key driver of whether
+      the email gets opened.
   - name: sent_at
     type: string
-    description: "Send timestamp"
+    description: Date and time the email was sent to the recipient. Marks the start
+      of that recipient's engagement timeline.
   - name: opened_at
     type: string
-    description: "Open timestamp (null if not opened)"
+    description: Date and time the recipient opened the email, if they did. Indicates
+      initial interest in the message.
   - name: clicked_at
     type: string
-    description: "Click timestamp (null if not clicked)"
+    description: Date and time the recipient clicked a link in the email, if they
+      did. Shows deeper engagement than an open.
   - name: bounced
-    type: string
-    description: "true/false bounce flag"
-      # Realistic ~8% bounce rate. accepted_values keeps these castable to the
-      # silver boolean (a bare flag name has no boolean semantic hint otherwise).
-    accepted_values: ["false", "false", "false", "false", "false", "false", "false", "false", "false", "false", "false", "true"]
+    type: boolean
+    description: Whether the email failed to reach the recipient. High bounce rates
+      signal list quality or deliverability issues.
   - name: unsubscribed
-    type: string
-    description: "true/false unsubscribe flag"
-      # Realistic ~5% unsubscribe rate.
-    accepted_values: ["false", "false", "false", "false", "false", "false", "false", "false", "false", "false", "false", "false", "false", "false", "false", "false", "false", "false", "false", "true"]
+    type: boolean
+    description: Whether the recipient opted out of future emails after this campaign.
+      Tracks list health and audience loss.
 
 source:
   type: landing
-  path: "{landing_root}/email_campaigns"
+  path: '{landing_root}/email_campaigns'
   format: csv
-  options:
-    engine_options:
-      header: "true"
-      recursiveFileLookup: "true"
+  partition:
+    format: y_%Y/m_%m/d_%d/h_%H
   load_mode: incremental
   watermark_strategy: pipeline_log
-  partition:
-    format: "y_%Y/m_%m/d_%d/h_%H"
 
-lineage:
-  enabled: true
-  capture_timestamp: true
-  timestamp_column_name: _lakelogic_processed_at
+primary_key:
+- campaign_id
+- recipient_email
+
+metadata:
+  run_log_table: '{domain_catalog}.lakelogic_run_log'
+
+dataset: bronze_hubspot_email_campaigns

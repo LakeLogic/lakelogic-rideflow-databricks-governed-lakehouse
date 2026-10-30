@@ -1,0 +1,109 @@
+version: 1.0.0
+
+info:
+  title: Silver — Salesforce Contacts
+  target_layer: silver
+  table_name: '{silver_layer}_salesforce_contacts'
+  system: salesforce
+  domain: business
+
+model:
+  fields:
+  - name: attributes
+    type: json
+    required: false
+    description: Column 'attributes' projected from source table 'salesforce_contacts',
+      typed as json.
+  - name: Id
+    type: string
+    required: true
+    description: Business key 'Id' (from source table 'salesforce_contacts'), typed
+      as string.
+  - name: AccountId
+    type: string
+    required: false
+    description: Column 'AccountId' projected from source table 'salesforce_contacts',
+      typed as string.
+  - name: FirstName
+    type: string
+    required: false
+    description: Column 'FirstName' projected from source table 'salesforce_contacts',
+      typed as string.
+  - name: LastName
+    type: string
+    required: false
+    description: Column 'LastName' projected from source table 'salesforce_contacts',
+      typed as string.
+  - name: Email
+    type: string
+    required: false
+    pii: true
+    classification: email
+    description: Column 'Email' projected from source table 'salesforce_contacts',
+      typed as string. Personal data (email), not masked.
+  - name: Title
+    type: string
+    required: false
+    description: Column 'Title' projected from source table 'salesforce_contacts',
+      typed as string.
+  - name: Phone
+    type: string
+    required: false
+    pii: true
+    classification: phone
+    description: Column 'Phone' projected from source table 'salesforce_contacts',
+      typed as string. Personal data (phone), not masked.
+  - name: MailingCity
+    type: string
+    required: false
+    description: Column 'MailingCity' projected from source table 'salesforce_contacts',
+      typed as string.
+  - name: CreatedDate
+    type: timestamp
+    required: false
+    description: Column 'CreatedDate' projected from source table 'salesforce_contacts',
+      typed as timestamp.
+  - name: LastModifiedDate
+    type: timestamp
+    required: false
+    description: Column 'LastModifiedDate' projected from source table 'salesforce_contacts',
+      typed as timestamp.
+  - name: SystemModstamp
+    type: timestamp
+    required: false
+    description: Column 'SystemModstamp' projected from source table 'salesforce_contacts',
+      typed as timestamp.
+  - name: IsDeleted
+    type: boolean
+    required: false
+    description: Column 'IsDeleted' projected from source table 'salesforce_contacts',
+      typed as boolean.
+
+primary_key:
+- Id
+
+quality:
+  row_rules:
+  - name: Id_not_null
+    sql: Id IS NOT NULL
+    category: completeness
+    description: id is always present (never null).
+
+transformations:
+- deduplicate:
+    by:
+    - Id
+    sort_by:
+    - LastModifiedDate
+    order: desc
+
+dataset: silver_salesforce_contacts
+
+source:
+  type: table
+  path: table:{bronze_root}.{bronze_layer}_salesforce_contacts
+  load_mode: incremental
+  watermark_field: _lakelogic_processed_at
+
+metadata:
+  run_log_table: '{domain_catalog}.lakelogic_run_log'

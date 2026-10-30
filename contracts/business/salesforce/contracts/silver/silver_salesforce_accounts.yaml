@@ -1,0 +1,117 @@
+version: 1.0.0
+
+info:
+  title: Silver — Salesforce Accounts
+  target_layer: silver
+  table_name: '{silver_layer}_salesforce_accounts'
+  system: salesforce
+  domain: business
+
+model:
+  fields:
+  - name: attributes
+    type: json
+    required: false
+    description: Column 'attributes' projected from source table 'salesforce_accounts',
+      typed as json.
+  - name: Id
+    type: string
+    required: true
+    description: Business key 'Id' (from source table 'salesforce_accounts'), typed
+      as string.
+  - name: Name
+    type: string
+    required: false
+    pii: true
+    classification: person_name
+    description: Column 'Name' projected from source table 'salesforce_accounts',
+      typed as string. Personal data (person_name), not masked.
+  - name: Type
+    type: string
+    required: false
+    description: Column 'Type' projected from source table 'salesforce_accounts',
+      typed as string.
+  - name: Industry
+    type: string
+    required: false
+    description: Column 'Industry' projected from source table 'salesforce_accounts',
+      typed as string.
+  - name: BillingCity
+    type: string
+    required: false
+    description: Column 'BillingCity' projected from source table 'salesforce_accounts',
+      typed as string.
+  - name: BillingCountry
+    type: string
+    required: false
+    description: Column 'BillingCountry' projected from source table 'salesforce_accounts',
+      typed as string.
+  - name: NumberOfEmployees
+    type: Int64
+    required: false
+    description: Column 'NumberOfEmployees' projected from source table 'salesforce_accounts',
+      typed as Int64.
+  - name: AnnualRevenue
+    type: decimal(18,2)
+    required: false
+    description: Column 'AnnualRevenue' projected from source table 'salesforce_accounts',
+      typed as decimal(18,2).
+  - name: OwnerId
+    type: string
+    required: false
+    description: Column 'OwnerId' projected from source table 'salesforce_accounts',
+      typed as string.
+  - name: RideFlow_Account_Code__c
+    type: string
+    required: false
+    description: Column 'RideFlow_Account_Code__c' projected from source table 'salesforce_accounts',
+      typed as string.
+  - name: CreatedDate
+    type: timestamp
+    required: false
+    description: Column 'CreatedDate' projected from source table 'salesforce_accounts',
+      typed as timestamp.
+  - name: LastModifiedDate
+    type: timestamp
+    required: false
+    description: Column 'LastModifiedDate' projected from source table 'salesforce_accounts',
+      typed as timestamp.
+  - name: SystemModstamp
+    type: timestamp
+    required: false
+    description: Column 'SystemModstamp' projected from source table 'salesforce_accounts',
+      typed as timestamp.
+  - name: IsDeleted
+    type: boolean
+    required: false
+    description: Column 'IsDeleted' projected from source table 'salesforce_accounts',
+      typed as boolean.
+
+primary_key:
+- Id
+
+quality:
+  row_rules:
+  - name: Id_not_null
+    sql: Id IS NOT NULL
+    category: completeness
+    description: id is always present (never null).
+
+transformations:
+- deduplicate:
+    by:
+    - Id
+    sort_by:
+    - LastModifiedDate
+    order: desc
+
+dataset: silver_salesforce_accounts
+
+source:
+  type: table
+  path: table:{bronze_root}.{bronze_layer}_salesforce_accounts
+  load_mode: incremental
+  watermark_field: _lakelogic_processed_at
+
+metadata:
+  run_log_table: '{domain_catalog}.lakelogic_run_log'

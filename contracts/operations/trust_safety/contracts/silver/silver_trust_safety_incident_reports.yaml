@@ -1,0 +1,90 @@
+version: 1.0.0
+
+info:
+  title: Silver — Trust Safety Incident Reports
+  target_layer: silver
+  table_name: '{silver_layer}_trust_safety_incident_reports'
+  system: trust_safety
+  domain: operations
+
+model:
+  fields:
+  - name: file_path
+    type: string
+    required: false
+    description: Column 'file_path' projected from source table 'trust_safety_incident_reports',
+      typed as string.
+  - name: incident_id
+    type: string
+    required: true
+    description: Column 'incident_id' projected from source table 'trust_safety_incident_reports',
+      typed as string.
+  - name: trip_id
+    type: string
+    required: false
+    description: Column 'trip_id' projected from source table 'trust_safety_incident_reports',
+      typed as string.
+  - name: driver_id
+    type: string
+    required: false
+    description: Column 'driver_id' projected from source table 'trust_safety_incident_reports',
+      typed as string.
+  - name: incident_datetime
+    type: timestamp
+    required: false
+    description: Column 'incident_datetime' projected from source table 'trust_safety_incident_reports',
+      typed as timestamp.
+  - name: location
+    type: string
+    required: false
+    description: Column 'location' projected from source table 'trust_safety_incident_reports',
+      typed as string.
+  - name: incident_type
+    type: string
+    required: false
+    description: Column 'incident_type' projected from source table 'trust_safety_incident_reports',
+      typed as string.
+  - name: estimated_cost
+    type: double
+    required: false
+    description: Column 'estimated_cost' projected from source table 'trust_safety_incident_reports',
+      typed as double.
+  - name: reported_by
+    type: string
+    required: false
+    description: Column 'reported_by' projected from source table 'trust_safety_incident_reports',
+      typed as string.
+  - name: what_happened
+    type: string
+    required: false
+    description: Column 'what_happened' projected from source table 'trust_safety_incident_reports',
+      typed as string.
+
+materialization:
+  strategy: overwrite
+
+quality:
+  row_rules:
+  - name: estimated_cost_range_min
+    sql: estimated_cost IS NULL OR estimated_cost >= 0
+    category: validity
+    description: estimated_cost is at least 0 when present.
+  - name: estimated_cost_range_max
+    sql: estimated_cost IS NULL OR estimated_cost <= 1000000
+    category: validity
+    description: estimated_cost is at most 1000000 when present.
+  - name: incident_id_not_null
+    sql: incident_id IS NOT NULL
+    category: completeness
+    description: incident_id is always present (never null).
+
+dataset: silver_trust_safety_incident_reports
+
+source:
+  type: table
+  path: table:{bronze_root}.{bronze_layer}_trust_safety_incident_reports
+  load_mode: incremental
+  watermark_field: _lakelogic_processed_at
+
+metadata:
+  run_log_table: '{domain_catalog}.lakelogic_run_log'

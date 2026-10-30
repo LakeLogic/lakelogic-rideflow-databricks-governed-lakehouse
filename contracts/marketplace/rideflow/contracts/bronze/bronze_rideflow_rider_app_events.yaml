@@ -1,12 +1,16 @@
 version: 1.0.0
 
 info:
-  title: "Bronze — RideFlow Rider App Events"
-  table_name: "{bronze_layer}_{system}_rider_app_events"
-  description: >
-    Raw rider app interaction events from the RideFlow mobile app.
-    Includes screen views, button taps, and in-app actions.
+  title: Bronze — Rideflow Rider App Events
   target_layer: bronze
+  description: Rider app activity from the Rideflow marketplace, capturing the actions
+    riders take in the app — opening screens, requesting rides — along with when each
+    event happened, which screen it occurred on, and the app version and platform
+    involved. Each record ties back to a rider and carries device and network address
+    details that are personal data and need privacy care, plus a city code for regional
+    reporting. Free-form event context is kept as structured text alongside the core
+    fields.
+  table_name: '{bronze_layer}_rideflow_rider_app_events'
   domain: marketplace
   system: rideflow
 
@@ -14,57 +18,66 @@ model:
   fields:
   - name: event_id
     type: string
-    description: "Unique event identifier"
+    description: Unique identifier for a single rider app event, used to trace and
+      de-duplicate activity records.
   - name: rider_id
     type: string
-    description: "FK to rider_profiles"
+    description: Identifies the rider whose app activity was recorded, linking events
+      to a customer.
   - name: device_id
     type: string
     pii: true
-    description: "Mobile device ID — persistent identifier, treat as PII"
+    classification: device_id
+    description: Identifies the device the rider used; personal data that should be
+      handled with privacy care.
   - name: ip_address
     type: string
     pii: true
-    description: "Client IP address — quasi-identifier under GDPR"
+    classification: ip_address
+    description: The network address the rider connected from; personal data that
+      should be handled with privacy care.
   - name: event_name
     type: string
-    description: "Event type (screen_view, button_tap, search, etc.)"
+    description: The type of action the rider took in the app, such as opening a screen
+      or requesting a ride.
   - name: screen_name
     type: string
-    description: "Screen where event occurred"
+    description: The app screen where the event occurred, showing where riders spend
+      time in the app.
   - name: event_timestamp
     type: string
-    description: "Event timestamp"
+    description: When the event happened, used to order and analyse rider activity
+      over time.
   - name: app_version
     type: string
-    description: "App version string"
+    description: The version of the rider app in use, helping explain behaviour differences
+      across releases.
   - name: platform
     type: string
-    description: "ios, android"
+    description: The device platform (such as iOS or Android) the rider used, supporting
+      platform-level analysis.
   - name: city_code
     type: string
-    description: "City code at time of event"
-  - name: country_code
-    type: string
-    description: "ISO 3166-1 alpha-2 country of city_code — the partition key (materialization._all in _system.yaml)"
+    description: The market or city the event is associated with, enabling regional
+      reporting.
   - name: event_properties_json
     type: string
-    description: "Raw event properties as JSON"
+    description: Additional event details stored as structured text, holding context
+      specific to each event type.
 
 source:
   type: landing
-  path: "{landing_root}/rider_app_events"
+  path: '{landing_root}/rider_app_events'
   format: csv
-  options:
-    engine_options:
-      header: "true"
-      recursiveFileLookup: "true"
+  partition:
+    format: y_%Y/m_%m/d_%d/h_%H
   load_mode: incremental
   watermark_strategy: pipeline_log
-  partition:
-    format: "y_%Y/m_%m/d_%d/h_%H"
 
-lineage:
-  enabled: true
-  capture_timestamp: true
-  timestamp_column_name: _lakelogic_processed_at
+primary_key:
+- event_id
+
+metadata:
+  run_log_table: '{domain_catalog}.lakelogic_run_log'
+
+dataset: bronze_rideflow_rider_app_events

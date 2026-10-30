@@ -1,12 +1,15 @@
 version: 1.0.0
 
 info:
-  title: "Bronze — RideFlow Driver Telemetry"
-  table_name: "{bronze_layer}_{system}_driver_telemetry"
-  description: >
-    Raw GPS telemetry pings from active drivers on the RideFlow platform.
-    High-frequency location data (every 5-15 seconds while on trip).
+  title: Bronze — Rideflow Driver Telemetry
   target_layer: bronze
+  description: Driver location pings from the Rideflow marketplace, capturing where
+    a driver was, their speed, heading and GPS precision at the moment of each reading,
+    along with their availability status and the city it relates to. Readings link
+    to a specific driver and, where applicable, to the trip they were on, so activity
+    can be traced over time. Latitude and longitude are flagged as personal data,
+    making precise driver location the most sensitive content here.
+  table_name: '{bronze_layer}_rideflow_driver_telemetry'
   domain: marketplace
   system: rideflow
 
@@ -14,55 +17,64 @@ model:
   fields:
   - name: telemetry_id
     type: string
-    description: "Unique telemetry ping ID"
+    description: Unique identifier for each driver telemetry reading, used to trace
+      and de-duplicate individual location pings.
   - name: driver_id
     type: string
-    description: "FK to driver_profiles"
+    description: Identifies the driver the telemetry reading belongs to, linking activity
+      to a specific driver on the marketplace.
   - name: gps_lat
-    type: string
-    description: "GPS latitude"
+    type: Float64
+    pii: true
+    classification: gps_coordinate
+    description: Latitude of the driver's location at the time of the reading; sensitive
+      location data used for tracking and trip analysis.
   - name: gps_lng
-    type: string
-    description: "GPS longitude"
+    type: Float64
+    pii: true
+    classification: gps_coordinate
+    description: Longitude of the driver's location at the time of the reading; sensitive
+      location data used for tracking and trip analysis.
   - name: speed_kmh
-    type: string
-    description: "Speed in km/h"
+    type: Float64
+    description: The driver's speed in kilometres per hour when the reading was taken,
+      useful for trip and safety analysis.
   - name: heading
     type: string
-    description: "Heading in degrees (0-360)"
+    description: The direction the driver was travelling at the time of the reading,
+      typically expressed as a compass bearing.
   - name: accuracy_meters
     type: string
-    description: "GPS accuracy in meters"
+    description: How precise the reported location is, in metres; a smaller value
+      means a more reliable position.
   - name: trip_id
     type: string
-    description: "Active trip ID (null if idle)"
+    description: Identifies the trip the driver was on when the reading was taken,
+      connecting telemetry to a specific journey.
   - name: status
     type: string
-    description: "on_trip, idle, offline"
+    description: The driver's current state at the time of the reading, such as available,
+      on-trip, or offline.
   - name: city_code
     type: string
-    description: "City code"
-  - name: country_code
-    type: string
-    description: "ISO 3166-1 alpha-2 country of city_code — the partition key (materialization._all in _system.yaml)"
+    description: Short code for the city the reading relates to, used for regional
+      reporting and filtering.
   - name: timestamp
     type: string
-    description: "Telemetry ping timestamp"
+    description: The date and time the telemetry reading was recorded, used to order
+      and analyse driver activity over time.
 
 source:
-  type: landing
-  path: "{landing_root}/driver_telemetry"
+  type: stream
+  path: '{landing_root}/driver_telemetry'
   format: csv
   options:
-    engine_options:
-      header: "true"
-      recursiveFileLookup: "true"
-  load_mode: incremental
-  watermark_strategy: pipeline_log
-  partition:
-    format: "y_%Y/m_%m/d_%d/h_%H"
+    kind: files
+    checkpoint: '{log_root}/_checkpoints/driver_telemetry'
+    trigger: available_now
+    header: true
 
-lineage:
-  enabled: true
-  capture_timestamp: true
-  timestamp_column_name: _lakelogic_processed_at
+primary_key:
+- telemetry_id
+
+dataset: bronze_rideflow_driver_telemetry

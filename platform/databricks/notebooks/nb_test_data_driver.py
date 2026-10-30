@@ -1,1008 +1,1740 @@
 # Databricks notebook source
-# ═══════════════════════════════════════════════════════════════════════════════
-# Notebook  : Test Data Driver — Generate landing-zone test data from contracts
-# Purpose   : Generates realistic 24-hour streaming data into the ADLS landing
-#             zone using the native RideFlow StreamingSimulator. Also injects 
-#             surgical edge cases (TC-001 to TC-008) to validate the pipeline's
-#             quarantine logic.
-#
-# Called by:
-#   Databricks workflow or run interactively for development/testing.
-# ═══════════════════════════════════════════════════════════════════════════════
 
 # COMMAND ----------
 
-# ── LakeLogic source ──────────────────────────────────────────────────
-# Blank widget = install the published package from PyPI (what the demo does).
-# Set it to a wheel in the catalog's _wheels Volume to run an UNRELEASED build:
-#   platform/scripts/upload_lakelogic_wheel.sh   ->  prints the path to paste here
-# That is the only way to exercise a LakeLogic change on Databricks BEFORE it
-# is published, rather than discovering a bad release from the demo breaking.
-dbutils.widgets.text("lakelogic_wheel", "", "LakeLogic wheel (blank = PyPI)")
+# MAGIC %md
+# MAGIC # test_data_driver — write a synthetic BRONZE estate (Databricks)
+# MAGIC
+# MAGIC Generates synthetic bronze data from the contract schemas, with consistent foreign keys.
+# MAGIC **No production rows are read.** Every row has <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">_synthetic=true</span> and is **permanently
+# MAGIC synthetic** — never re-classify it as production.
+# MAGIC
+# MAGIC Use it for development, testing, demos and CI. Set <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">generative=true</span> (needs an LLM key in
+# MAGIC THIS environment) for AI-enriched values. Running the pipeline for silver/gold is optional.
+# MAGIC
+# MAGIC **What this notebook does**
+# MAGIC
+# MAGIC 1. Installs LakeLogic.
+# MAGIC 2. Defines the synthetic seed library (schema-driven rows, consistent foreign keys, documents).
+# MAGIC 3. Reads the parameters.
+# MAGIC 4. Writes synthetic bronze files into each contract's landing zone (<span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">seed</span> or <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">extend</span> mode).
+# MAGIC
+# MAGIC **Parameters**
+# MAGIC
+# MAGIC | Widget | Meaning |
+# MAGIC |---|---|
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">catalog</span> | Unity Catalog this run reads and writes |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">contracts_root</span> | workspace folder holding <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">contracts/</span> |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">domain</span> / <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">system</span> | which <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">_system.yaml</span> registry to load |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">environment</span> | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">dev</span> \| <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">staging</span> \| <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">prod</span> |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">rows_per_table</span> / <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">rows_per_entity</span> / <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">entities</span> | how many rows, for which entities |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">mode</span> | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">seed</span> (one window) \| <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">extend</span> (catch up to now) |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">windows_on_empty</span> / <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">history_minutes</span> / <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">max_windows</span> / <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">new_parent_ratio</span> | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">extend</span> windowing |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">loop_interval_minutes</span> / <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">max_run_minutes</span> | optional repeat loop |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">batches</span> / <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">seed</span> | files per table; random seed |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">invalid_ratio</span> / <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">duplicate_ratio</span> | deliberate bad rows for the quality rules |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">synthetic_schema</span> / <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">generative</span> | output schema label; AI-enriched values |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">lakelogic_version</span> / <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">lakelogic_wheel</span> | install source (blank = latest from PyPI; a wheel wins) |
+# MAGIC
+# MAGIC Generated by LakeLogic Lakehouse Studio. Edit it here or in Studio; Studio's changes arrive as a pull request.
+# MAGIC generated by: LakeLogic Lakehouse Studio
+# MAGIC revision: chv1:2363087383756d2867a21c9f1cf6b32fb0a38381dc34251cc866a0f28a067fb9
+# MAGIC governance seal: sha256:f73b1d4ee46b840f739932844b48ac4c237a543305f8673f2258a48d95d17a7c
+# MAGIC source: estate snapshot snap-8db66a0e80c042cd
+# MAGIC
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 1. Install LakeLogic
+# MAGIC
+# MAGIC Databricks pre-installs the packages named in a <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">%pip</span> cell at session start, so a
+# MAGIC bare <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">lakelogic</span> can report "already satisfied" and silently keep an older build --
+# MAGIC the run then tests the wrong code while looking correct. <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">--upgrade</span> (or an explicit
+# MAGIC <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">==</span>) forces pip to act. <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">restartPython()</span> is required after any <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">%pip</span> install
+# MAGIC before the new version is importable.
+
+# COMMAND ----------
+
+# DBTITLE 1,Resolve install source
+# Declare the parameters (the job passes values for these).
 dbutils.widgets.text("lakelogic_version", "", "LakeLogic version (blank = latest)")
-_wheel = dbutils.widgets.get("lakelogic_wheel").strip()
-# --force-reinstall matters: Databricks pre-installs the packages named in
-# this cell into the notebook environment at session startup, so pip sees the
-# PUBLISHED lakelogic already present. An unreleased wheel carries the SAME
-# version number, so pip reports "already satisfied" and silently keeps the
-# released code - the run then tests the wrong build while looking correct.
+dbutils.widgets.text("lakelogic_wheel", "", "LakeLogic wheel (blank = PyPI)")
+# The extras the design needs: `documents` is added only when it reads PDFs, images or Word.
+dbutils.widgets.text("lakelogic_extras", "synthetic,pdf", "LakeLogic extras")
+
+# Read them.
 _version = dbutils.widgets.get("lakelogic_version").strip()
-# The PyPI branch needs the same protection the wheel branch already had.
-# Databricks PRE-INSTALLS the packages named in this cell at session start,
-# so a bare `lakelogic` is "already satisfied" by whatever version the
-# environment was built with — pip installs nothing and the run silently
-# executes the OLD code. That is exactly how a run on "1.51.0" reproduced a
-# bug fixed in 1.51.0: it was really running the pre-installed 1.50.0, and
-# the null `lakelogic_version` in its telemetry was the only tell.
-# An explicit `==` is unsatisfied by an older pre-install, so pip must act;
-# `--upgrade` covers the unpinned case.
+_wheel = dbutils.widgets.get("lakelogic_wheel").strip()
+_extras = dbutils.widgets.get("lakelogic_extras").strip() or "synthetic,pdf"
+# [synthetic] brings Faker for realistic values; [pdf] reads PDFs for document contracts.
+# A wheel wins over a version. `--force-reinstall` because Databricks pre-installs the
+# packages named in this cell at session start: without it a same-version wheel is
+# "already satisfied" and the run silently executes the PUBLISHED build instead.
 if _wheel:
-    lakelogic_pkg = f"{_wheel} --force-reinstall"
+    # The extras on the wheel path too: a bare wheel installs no extras, and the
+    # synthetic seed needs reportlab to write documents. pip accepts extras on a local
+    # file exactly as it does on a package name.
+    lakelogic_pkg = f"{_wheel}[{_extras}] --force-reinstall"
 elif _version:
-    lakelogic_pkg = f"lakelogic=={_version}"
+    lakelogic_pkg = f"lakelogic[{_extras}]=={_version}"
 else:
-    lakelogic_pkg = "lakelogic --upgrade"
+    lakelogic_pkg = f"lakelogic[{_extras}] --upgrade"
 print(f"Installing LakeLogic from: {lakelogic_pkg}")
 
 # COMMAND ----------
 
-# MAGIC # Only lakelogic is named: pyyaml/polars/deltalake are its own dependencies.
-# MAGIC # pyarrow<25: DBR ships 21.0.0, lakelogic needs >=23.0.1, databricks-connect caps <25.
-# MAGIC %pip install $lakelogic_pkg "pyarrow<25" reportlab pdfplumber
+# DBTITLE 1,Install LakeLogic
+# MAGIC # pyarrow<25: DBR ships an older pyarrow than lakelogic needs, and
+# MAGIC # databricks-connect caps it below 25. pyyaml/polars/deltalake arrive as
+# MAGIC # lakelogic's own dependencies and are not named here.
+# MAGIC %pip install $lakelogic_pkg "pyarrow<25"
 
 # COMMAND ----------
 
+# DBTITLE 1,Restart Python
 dbutils.library.restartPython()
 
 # COMMAND ----------
 
-# Fail loudly if the engine is not the one asked for. A pinned `pip install lakelogic==X`
-# that cannot be satisfied (e.g. Databricks' PyPI index has not picked up a fresh release)
-# prints an ERROR and the notebook CARRIES ON with the pre-installed version - a run that
-# looks fine while executing old code (seen 2026-10-04: 1.69.0 requested, 1.68.0 ran).
-import lakelogic as _ll
-_want = (dbutils.widgets.get("lakelogic_version") or "").strip()
-if _want and _ll.__version__ != _want:
-    raise RuntimeError(
-        f"LakeLogic {_want} was requested but {_ll.__version__} is installed - the pip install "
-        "failed (see the install cell). Re-run once the release is on Databricks' PyPI index."
-    )
-print(f"LakeLogic {_ll.__version__}")
-
-# COMMAND ----------
-
 # MAGIC %md
-# MAGIC ## ⚙️ Widgets
-
-# COMMAND ----------
-
-dbutils.widgets.removeAll()
-
-# ── Core ──────────────────────────────────────────────────────────────────────
-dbutils.widgets.text("registry_path",
-    "/Volumes/rideflow_dev_platform/nondelta/_contracts/marketplace/rideflow/_system.yaml",
-    "Config - Registry",
-)
-dbutils.widgets.dropdown("environment", "dev", ["dev", "staging", "prod"], "Config - Environment")
-dbutils.widgets.text("num_windows", "48", "Config - Hours (Windows)")  # 2 days of hourly history
-dbutils.widgets.text("rows_per_table", "100", "Config - Rows per table per window")
-dbutils.widgets.dropdown("build_bronze_silver", "false", ["true", "false"], "Config - Build bronze+silver after generating")
-dbutils.widgets.dropdown("inject_edge_cases", "true", ["true", "false"], "Config - Edge Cases")
-# single  = generate only the system named by registry_path (called per-orchestrator).
-# all     = discover every domain, topo-sort by cross-domain FK edges, then for each
-#           wave generate landing data + run bronze+silver so downstream domains read
-#           REAL upstream ids (hubspot→rider_id, zendesk→charge_id). FK-consistent seed.
-dbutils.widgets.dropdown("seed_mode", "single", ["single", "all"], "Config - Seed mode")
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## 📦 Imports & Config
-
-# COMMAND ----------
-
-import os
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
-import polars as pl
-from lakelogic.core.streaming import StreamingSimulator
-from lakelogic.core.registry import DomainRegistry
-
-try:
-    dbutils = dbutils
-except NameError:
-    class DBUtilsMock:
-        class WidgetsMock:
-            def get(self, *a, **k): return ""
-        widgets = WidgetsMock()
-    dbutils = DBUtilsMock()
-
-ENVIRONMENT = dbutils.widgets.get("environment").strip() or "dev"
-NUM_WINDOWS = int(dbutils.widgets.get("num_windows").strip() or "48")
-# Every generator's write is capped here, so a seed stays small and fast; raise it once
-# the end-to-end run is proven.
-ROWS_PER_TABLE = int(dbutils.widgets.get("rows_per_table").strip() or "100")
-INJECT_EDGE_CASES = dbutils.widgets.get("inject_edge_cases").lower() == "true"
-REGISTRY_PATH = dbutils.widgets.get("registry_path").strip()
-
-# ── LakeLogic telemetry: where run logs go (optional) ─────────────────────────
-# Two job/notebook parameters, the same in every pipeline notebook:
-#   telemetry_scope      Databricks secret scope holding `lakelogic-observatory-endpoint`
-#                        and `lakelogic-api-key` (default "rideflow"). Point a quick test at
-#                        another workspace by passing another scope, e.g. "rideflow-stage".
-#   observatory_endpoint Optional URL override (not secret). The API KEY is never a
-#                        parameter: parameters show in the run UI, so it comes from the scope.
-# The _domain.yaml observatory block reads ${LAKELOGIC_OBSERVATORY_ENDPOINT} and
-# ${LAKELOGIC_API_KEY}; this sets them. No scope/keys -> the pipeline runs without telemetry.
-import os as _os
-
-def _param(name, default, label):
-    try:
-        return dbutils.widgets.get(name).strip()
-    except Exception:
-        dbutils.widgets.text(name, default, label)
-        return dbutils.widgets.get(name).strip()
-
-_TELEMETRY_SCOPE = _param("telemetry_scope", "rideflow", "Telemetry - secret scope")
-_ENDPOINT_OVERRIDE = _param("observatory_endpoint", "", "Telemetry - endpoint override (optional)")
-for _env, _key in (("LAKELOGIC_OBSERVATORY_ENDPOINT", "lakelogic-observatory-endpoint"),
-                   ("LAKELOGIC_API_KEY", "lakelogic-api-key")):
-    if _os.environ.get(_env):
-        continue  # a job's spark_env_vars wins
-    try:
-        _os.environ[_env] = dbutils.secrets.get(_TELEMETRY_SCOPE, _key)
-    except Exception:
-        pass
-if _ENDPOINT_OVERRIDE:
-    _os.environ["LAKELOGIC_OBSERVATORY_ENDPOINT"] = _ENDPOINT_OVERRIDE
-print("LakeLogic telemetry:", "ON -> " + _os.environ["LAKELOGIC_OBSERVATORY_ENDPOINT"]
-      if _os.environ.get("LAKELOGIC_OBSERVATORY_ENDPOINT") and _os.environ.get("LAKELOGIC_API_KEY")
-      else f"off (no keys in secret scope '{_TELEMETRY_SCOPE}')")
-SEED_MODE = (dbutils.widgets.get("seed_mode").strip() or "single").lower()
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## 🔐 Inject Domain Secrets (Interactive Fallback)
-# MAGIC When running interactively outside of a Databricks Job, <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">spark_env_vars</span> are not automatically injected.
-# MAGIC This cell manually pulls the secret scope and maps them to environment variables (e.g., <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">rideflow-dev-storage-account</span> → <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">RIDEFLOW_DEV_STORAGE_ACCOUNT</span>).
-
-# COMMAND ----------
-
-# ── Manual Override ───────────────────────────────────────────────────────────
-# If you do not have access to the Key Vault or Databricks Secrets, you can 
-# uncomment the lines below to pass your variables directly:
-#
-# os.environ["RIDEFLOW_DEV_STORAGE_ACCOUNT"] = "your_storage_account"
-#
-# # Azure Storage Credentials (Direct mode - no Databricks Unity Catalog credentials detected):
-# # Set either SPN or Storage Key
-# # os.environ["AZURE_CLIENT_ID"] = "your_spn_client_id"
-# # os.environ["AZURE_CLIENT_SECRET"] = "your_spn_client_secret"
-# # os.environ["AZURE_TENANT_ID"] = "your_tenant_id"
-# # OR
-# # os.environ["AZURE_STORAGE_ACCOUNT_KEY"] = "your_storage_key"
-# ──────────────────────────────────────────────────────────────────────────────
-
-env_upper = ENVIRONMENT.upper()
-if f"RIDEFLOW_{env_upper}_STORAGE_ACCOUNT" not in os.environ:
-    scope = "adbrideflow_secret_scope_001"
-    print(f"🔄 Interactive mode detected. Mapping Databricks scope '{scope}' to OS environment variables...")
-    try:
-        # Only pull the specific secrets we actually need for the pipeline
-        relevant_secrets = {
-            f"rideflow-{ENVIRONMENT}-storage-account",
-            "azure-client-id",
-            "azure-client-secret",
-            "azure-tenant-id",
-            "azure-storage-account-key"
-        }
-        
-        for secret in dbutils.secrets.list(scope=scope):
-            if secret.key in relevant_secrets:
-                # Key Vault secrets use hyphens (e.g., 'rideflow-dev-storage-account')
-                # Environment variables use underscores (e.g., 'RIDEFLOW_DEV_STORAGE_ACCOUNT')
-                env_key = secret.key.upper().replace("-", "_")
-                os.environ[env_key] = dbutils.secrets.get(scope=scope, key=secret.key)
-                print(f"  ✓ Mapped secret: {secret.key:<30} → os.environ['{env_key}']")
-                
-        # Polars object-store specific toggle for Azure Key authentication
-        os.environ["POLARS_AUTO_USE_AZURE_STORAGE_ACCOUNT_KEY"] = "1"
-        print(f"  ✓ Mapped secret: polars-auth-toggle             → os.environ['POLARS_AUTO_USE_AZURE_STORAGE_ACCOUNT_KEY']")
-        print()
-    except Exception as e:
-        print(f"  ⚠ Could not map secrets: {e}\n")
-
-storage_account = os.environ.get(f"RIDEFLOW_{env_upper}_STORAGE_ACCOUNT")
-if not storage_account:
-    print(f"Storage account name not found. Ensure RIDEFLOW_{env_upper}_STORAGE_ACCOUNT is set.")
-
-# Catalog — derived from the registry Volume path (/Volumes/<catalog>/...) so it
-# always matches the catalog this run targets. One source of truth; no ADLS needed.
-_derived_catalog = "rideflow_dev_platform"
-if REGISTRY_PATH.startswith("/Volumes/"):
-    _p = REGISTRY_PATH.split("/")
-    if len(_p) > 2 and _p[2]:
-        _derived_catalog = _p[2]
-CATALOG = os.environ.get(f"RIDEFLOW_{env_upper}_CATALOG") or _derived_catalog
-# Ensure the catalog env var is set so the registry resolves {catalog} correctly
-os.environ[f"RIDEFLOW_{env_upper}_CATALOG"] = CATALOG
-
-if os.path.exists("/Volumes"):
-    SYSTEM_YAML = REGISTRY_PATH or f"/Volumes/{CATALOG}/nondelta/_contracts/marketplace/rideflow/_system.yaml"
-    mode = "uc"
-else:
-    if REGISTRY_PATH and os.path.exists(REGISTRY_PATH):
-        SYSTEM_YAML = REGISTRY_PATH
-    else:
-        repo_root = Path(os.getcwd()).resolve()
-        while not (repo_root / "contracts").exists() and repo_root.parent != repo_root:
-            repo_root = repo_root.parent
-        SYSTEM_YAML = str(repo_root / "contracts" / "marketplace" / "rideflow" / "_system.yaml")
-    mode = "direct"
-
-print(f"📖 Loading DomainRegistry from: {SYSTEM_YAML}")
-registry = DomainRegistry.from_yaml(
-    path=SYSTEM_YAML,
-    environment=ENVIRONMENT,
-    storage_mode=mode
-)
-
-if mode == "uc":
-    LANDING_URI = registry.storage.landing_root
-    print(f"✨ Databricks detected. Using Unity Catalog Volume.")
-else:
-    LANDING_URI = registry.storage.landing_path
-    print(f"💻 Local mode detected. Using local path.")
-
-print(f"🚀 Landing URI: {LANDING_URI}")
-print(f"⏱ Windows: {NUM_WINDOWS} hours")
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## 🌊 Per-domain data generators
+# MAGIC ## 2. Synthetic seed library
 # MAGIC
-# MAGIC This driver is called once per system (its <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">registry_path</span> widget). It looks
-# MAGIC up a generator for <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">(domain, system)</span> and writes that system's landing data.
-# MAGIC - **marketplace/rideflow** → native <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">StreamingSimulator</span> + 800 edge cases
-# MAGIC - **marketing / payments / operations** → synthetic CSV/PDF generators
-# MAGIC   (ported from the RA repo's <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">test_data_driver_all</span>). Cross-domain FK pools
-# MAGIC   (e.g. hubspot→rider_id) are read from **UC silver via Spark**, so run the
-# MAGIC   marketplace orchestrator first for referential integrity; otherwise the
-# MAGIC   readers fall back to synthetic IDs and the pipeline still runs.
+# MAGIC Pure functions: nothing runs until section 4 calls them.
 
 # COMMAND ----------
 
-# Derive (domain, system) from the registry path: .../_contracts/<domain>/<system>/_system.yaml
-_parts = [p for p in SYSTEM_YAML.replace("\\", "/").split("/") if p]
-DOMAIN, SYSTEM = (_parts[-3], _parts[-2]) if len(_parts) >= 3 else ("marketplace", "rideflow")
-print(f"🧭 Target: {DOMAIN}/{SYSTEM}")
+# DBTITLE 1,Synthetic seed library
+"""Synthetic bronze seed: fake rows for every contract that reads a landing zone.
+
+- Rows come from each contract's schema; no production data is read.
+- Each entity is written to its contract's landing zone (`source.path`), in the
+  contract's format and partition (see `landing_layout`).
+- Foreign keys are consistent (lakelogic `DataGenerator.generate_related`).
+- Same seed => same rows. Every row has `_synthetic=True`.
+- Self-contained (stdlib, lakelogic, polars) so it can be pasted into a notebook.
+  Do not add `api.*` imports or `from __future__` (it must run mid-notebook).
+"""
+import argparse
+import hashlib
+import os
+import random
+import re
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional, Tuple
+
+# A fixed generation window keeps temporal columns reproducible from the seed.
+_DEFAULT_WINDOW_START = datetime(2020, 1, 1)
+_DEFAULT_WINDOW_END = datetime(2025, 1, 1)
+_MARKER = "_synthetic"
 
 
-# ── Where a domain's tables live ──────────────────────────────────────────────
-# A domain is either a SCHEMA of the shared catalog (`<catalog>`.`<domain>`, layer in the
-# table name) or its OWN CATALOG with a schema per layer (`rideflow_dev_marketplace`.bronze /
-# .silver / .gold / .quarantine / .lakelogic). The domain's system registry decides
-# (storage.bronze_root / silver_root / gold_root, and the environment's
-# domain_catalog_prefix); this reads it, so a notebook works for both while domains move
-# across one at a time. Same function in every notebook that names a table itself — keep the
-# copies identical.
-def own_catalog(catalog: str, domain: str):
-    """The domain's own catalog name, or None when it is a schema of the shared catalog.
-    Read from the domain's system registry as staged in the contracts Volume: a registry that
-    declares a schema per layer names the catalog `<domain_catalog_prefix>_<domain>`."""
-    import glob
+def reads_landing(layer: Any, contract_dict: Any) -> bool:
+    """True if the contract reads a landing zone, so it gets synthetic data.
 
-    import yaml
+    - Every bronze contract, including a stream of landed files (`source.type: stream`,
+      `options.kind: files`, read with Auto Loader on Databricks).
+    - Not a stream from a broker (Event Hubs, Kafka, Kinesis, Pub/Sub): it has no landing
+      folder, and seeding it wrote a Delta table into a Unity Catalog volume, which fails
+      (a volume cannot rename the Delta commit file).
+    - Any contract with `source.type: landing`, e.g. gold seed dimensions (countries,
+      a date spine) that read a CSV from landing with no bronze in front.
+    """
+    source = (contract_dict or {}).get("source") if isinstance(contract_dict, dict) else None
+    kind = str(source.get("type") or "").lower() if isinstance(source, dict) else ""
+    if kind == "stream":
+        options = source.get("options") if isinstance(source.get("options"), dict) else {}
+        return str(options.get("kind") or "").lower() == "files"
+    return layer == "bronze" or kind == "landing"
 
-    try:
-        env = dbutils.widgets.get("environment").strip() or "dev"
-    except Exception:  # noqa: BLE001 - a notebook without the widget
-        env = "dev"
-    for reg in sorted(glob.glob(f"/Volumes/{catalog}/nondelta/_contracts/{domain}/*/_system.yaml")):
-        try:
-            with open(reg, encoding="utf-8") as fh:
-                doc = yaml.safe_load(fh) or {}
-        except Exception:  # noqa: BLE001
+
+def _fields_of(contract_dict: Dict[str, Any]) -> List[str]:
+    """Column names in a contract's `model.fields`."""
+    model = contract_dict.get("model") if isinstance(contract_dict, dict) else None
+    fields = (model or {}).get("fields") or []
+    return [f.get("name") for f in fields if isinstance(f, dict) and f.get("name")]
+
+
+def _resolve_name(name: Any, *, system: str = "", domain: str = "") -> str:
+    """A name with layer, system and domain placeholders filled in, lowercased."""
+    out = _resolve_layers(str(name or ""))
+    if system:
+        out = out.replace("{system}", system)
+    if domain:
+        out = out.replace("{domain}", domain)
+    return out.strip().lower()
+
+
+def declared_relationships(
+    docs: Dict[str, Dict[str, Any]],
+    *,
+    aliases: Optional[Dict[str, str]] = None,
+    system: str = "",
+    domain: str = "",
+    unresolved: Optional[List[Dict[str, str]]] = None,
+) -> List[Dict[str, str]]:
+    """FK edges from the contracts' declared `foreign_key` blocks.
+
+    - `docs` is `{name: contract doc}`.
+    - `foreign_key.contract` is matched to a doc's name, `dataset`, `info.table_name`
+      or an `aliases` entry (e.g. the silver table a bronze entity feeds).
+    - Kept only if the parent is in `docs` and has the referenced column.
+    - Otherwise (usually a parent in another system) it goes to `unresolved`,
+      never to a wrong table.
+    """
+    index: Dict[str, str] = {}
+    for name, doc in docs.items():
+        info = doc.get("info") or {}
+        for key in (name, doc.get("dataset"), info.get("table_name")):
+            resolved = _resolve_name(key, system=system, domain=domain)
+            if resolved and "{" not in resolved:
+                index.setdefault(resolved, name)
+    for alias, name in (aliases or {}).items():
+        if name in docs:
+            index.setdefault(_resolve_name(alias, system=system, domain=domain), name)
+
+    rels: List[Dict[str, str]] = []
+    seen = set()
+    for child in sorted(docs):
+        for field in ((docs[child].get("model") or {}).get("fields") or []):
+            fk = field.get("foreign_key") if isinstance(field, dict) else None
+            if not isinstance(fk, dict) or not field.get("name"):
+                continue
+            column = str(field["name"])
+            target = _resolve_name(fk.get("contract"), system=system, domain=domain)
+            parent = index.get(target)
+            parent_column = str(fk.get("column") or column)
+            if (child, column) in seen:
+                continue
+            if not parent or parent == child or parent_column not in _fields_of(docs[parent]):
+                if unresolved is not None:
+                    unresolved.append({"child": child, "child_column": column,
+                                       "parent_contract": target, "parent_column": parent_column})
+                continue
+            seen.add((child, column))
+            rels.append({"child": child, "child_column": column,
+                         "parent": parent, "parent_column": parent_column})
+    return rels
+
+
+def _declares_foreign_key(doc: Dict[str, Any], column: str) -> bool:
+    return any(
+        isinstance(f, dict) and f.get("name") == column and isinstance(f.get("foreign_key"), dict)
+        for f in ((doc.get("model") or {}).get("fields") or [])
+    )
+
+
+def contract_relationships(
+    docs: Dict[str, Dict[str, Any]],
+    *,
+    aliases: Optional[Dict[str, str]] = None,
+    system: str = "",
+    domain: str = "",
+    unresolved: Optional[List[Dict[str, str]]] = None,
+) -> List[Dict[str, str]]:
+    """Declared `foreign_key` edges, plus name-based edges for columns that declare none.
+
+    A column whose declared parent is outside `docs` is never re-wired by name.
+    """
+    declared = declared_relationships(
+        docs, aliases=aliases, system=system, domain=domain, unresolved=unresolved,
+    )
+    inferred = [
+        r for r in _infer_relationships({e: _fields_of(d) for e, d in docs.items()})
+        if not _declares_foreign_key(docs[r["child"]], r["child_column"])
+    ]
+    return declared + inferred
+
+
+def _infer_relationships(entity_columns: Dict[str, List[str]]) -> List[Dict[str, str]]:
+    """Fallback FK edges guessed from column names (declared `foreign_key` wins).
+
+    - `<base>_id` on a child points to the entity named `<base>` (singular or plural)
+      that also has `<base>_id`.
+    - Unmatched `*_id` columns stay plain fake ids.
+    """
+    # Which entity owns each `<name>_id` column.
+    owner_of: Dict[str, str] = {}
+    for ent in sorted(entity_columns):
+        singular = ent[:-1] if ent.endswith("s") else ent
+        for cand in (f"{ent}_id", f"{singular}_id"):
+            if cand in entity_columns[ent]:
+                owner_of.setdefault(cand, ent)
+    rels: List[Dict[str, str]] = []
+    seen = set()
+    for child in sorted(entity_columns):
+        for col in entity_columns[child]:
+            if not (isinstance(col, str) and col.endswith("_id")):
+                continue
+            parent = owner_of.get(col)
+            if parent and parent != child and (child, col) not in seen:
+                seen.add((child, col))
+                rels.append({"child": child, "child_column": col,
+                             "parent": parent, "parent_column": col})
+    return rels
+
+
+#: How many placeholder values a code column gets while its allowed values are unanswered.
+CODE_PLACEHOLDER_COUNT = 6
+_CODE_LIST_SQL = None
+
+
+def code_columns(contracts: Any) -> set:
+    """Columns a GOLD CODE DIMENSION lists: its step is `SELECT DISTINCT <col> FROM source`
+    (``code_list_sql``) and its key is that one column.
+
+    The scan is metadata-only, so nobody knows these columns' values. Unanswered, the
+    generator invented random `CAN-4821` codes and a code dimension got ~5,500 rows
+    (Databricks, 2026-09-29). :func:`with_code_placeholders` keeps them to a handful.
+    """
+    import re
+
+    global _CODE_LIST_SQL
+    if _CODE_LIST_SQL is None:
+        _CODE_LIST_SQL = re.compile(r"SELECT\s+DISTINCT\s+([A-Za-z_][A-Za-z0-9_]*)\s+FROM\s+source\b", re.IGNORECASE)
+    out = set()
+    for c in contracts or ():
+        doc = getattr(c, "contract_dict", c) or {}
+        if str(getattr(c, "layer", "") or (doc.get("info") or {}).get("target_layer") or "").lower() != "gold":
             continue
-        storage = doc.get("storage") or {}
-        prefix = ((doc.get("environments") or {}).get(env) or {}).get("domain_catalog_prefix")
-        if prefix and any(storage.get(f"{layer}_root") for layer in ("bronze", "silver", "gold")):
-            return f"{prefix}_{domain}"
+        pk = doc.get("primary_key")
+        pk = [pk] if isinstance(pk, str) else list(pk or [])
+        for step in doc.get("transformations") or []:
+            m = _CODE_LIST_SQL.search(str((step or {}).get("sql") or "")) if isinstance(step, dict) else None
+            if m and pk == [m.group(1)]:
+                out.add(m.group(1))
+    return out
+
+
+def _has_allowed_values(doc: Dict[str, Any], column: str) -> bool:
+    """Whether the (typed) bronze doc already states this column's values."""
+    for f in ((doc.get("model") or {}).get("fields") or []):
+        if isinstance(f, dict) and f.get("name") == column and f.get("accepted_values"):
+            return True
+    for rule in ((doc.get("quality") or {}).get("row_rules") or []):
+        if not isinstance(rule, dict):
+            continue
+        sql = str(rule.get("sql") or "")
+        if column in _sql_rule_columns(sql) and " in (" in sql.lower():
+            return True
+        av = rule.get("accepted_values")
+        if isinstance(av, dict) and str(av.get("field")) == column:
+            return True
+    return False
+
+
+def with_code_placeholders(doc: Dict[str, Any], codes: set) -> Dict[str, Any]:
+    """``doc`` with a small placeholder set on each code column that has no allowed values.
+
+    `cancelled_by_1` … `cancelled_by_6`: honest placeholders, not guesses. An answered
+    `q:codevalues` question becomes an accepted_values rule on silver, which
+    :func:`typed_bronze_doc` copies in, and then the real values are used instead.
+    """
+    for f in ((doc.get("model") or {}).get("fields") or []):
+        name = f.get("name") if isinstance(f, dict) else None
+        if name in codes and not _has_allowed_values(doc, name):
+            f["accepted_values"] = [f"{name}_{i}" for i in range(1, CODE_PLACEHOLDER_COUNT + 1)]
+    return doc
+
+
+def generate_bronze_frames(
+    registry_path: str,
+    *,
+    environment: str = "dev",
+    storage_mode: str = "catalog",
+    rows: int = 200,
+    seed: int = 7,
+    invalid_ratio: float = 0.0,
+    #: Per-entity row counts, e.g. `{"charges": 5000}`; others use `rows`.
+    rows_by_entity: Optional[Dict[str, int]] = None,
+    window_start: Optional[datetime] = None,
+    window_end: Optional[datetime] = None,
+    generative: bool = False,
+    ai_provider: Optional[str] = None,
+    ai_model: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Generate `{entity: polars.DataFrame}` for every landing contract. Does not write.
+
+    - Reads contract schemas only, typed from the silver contract that reads each one.
+    - FK edges come from `seed_relationships`.
+    - Skips `extraction` contracts; `external_logic` contracts get an empty frame.
+    - Every frame gets `_synthetic=True`.
+    - Raises `RuntimeError` if no contract reads a landing zone.
+    """
+    from lakelogic.core.generator import DataGenerator
+    from lakelogic.core.registry import DomainRegistry
+    import polars as pl
+
+    rows = max(1, int(rows))
+    window_start = window_start or _DEFAULT_WINDOW_START
+    window_end = window_end or _DEFAULT_WINDOW_END
+
+    registry = DomainRegistry.from_yaml(
+        registry_path, environment=environment, storage_mode=storage_mode
+    )
+    # Every contract that reads a landing zone (bronze and gold seed dims).
+    bronze_contracts = [
+        c for c in registry.contracts
+        if reads_landing(c.layer, c.contract_dict) and c.resolved_path
+    ]
+    if not bronze_contracts:
+        raise RuntimeError(
+            f"No bronze contracts in {registry_path} (nor any other contract reading a "
+            "landing zone) — nothing to seed."
+        )
+    # Skip `extraction` contracts: the generator rejects them and fails the whole batch.
+    extracted = sorted(c.entity for c in bronze_contracts if (c.contract_dict or {}).get("extraction"))
+    for entity in extracted:
+        print(f"[synthetic_seed] {entity}: skipped - it extracts from unstructured documents "
+              "(`extraction`), which cannot be synthesised; land real sample files for it")
+    bronze_contracts = [c for c in bronze_contracts if c.entity not in extracted]
+    # `external_logic` builds its own rows (e.g. date dim): header-only file.
+    bootstrap: Dict[str, List[str]] = {
+        c.entity: _fields_of(c.contract_dict or {})
+        for c in bronze_contracts if (c.contract_dict or {}).get("external_logic")
+    }
+    for entity in sorted(bootstrap):
+        print(f"[synthetic_seed] {entity}: header-only bootstrap - its rows come from its "
+              "`external_logic`, not from synthetic generation")
+    bronze_contracts = [c for c in bronze_contracts if c.entity not in bootstrap]
+    if not bronze_contracts and not bootstrap:
+        print(f"[synthetic_seed] every bronze contract in {registry_path} is extraction-based; nothing to generate")
+        return {}
+    # Use silver's types, not bronze's all-string ones.
+    consumers = silver_consumers(registry)
+    codes = code_columns(registry.contracts)
+    import yaml as _yaml
+
+    bronze = {
+        c.entity: _yaml.safe_dump(
+            with_code_placeholders(typed_bronze_doc(c.contract_dict or {}, consumers.get(c.entity)), codes),
+            sort_keys=False,
+        )
+        for c in bronze_contracts
+    }
+    # Only edges between generated tables.
+    relationships = [
+        r for r in seed_relationships(registry, quiet=True)
+        if r["child"] in bronze and r["parent"] in bronze
+    ]
+
+    def _generate(ai_on: bool) -> Dict[str, Any]:
+        kwargs: Dict[str, Any] = dict(
+            rows=(
+                {e: max(1, int((rows_by_entity or {}).get(e, rows))) for e in bronze}
+                if rows_by_entity else rows
+            ),
+            invalid_ratio=invalid_ratio, seed=seed, output_format="polars",
+            window_start=window_start, window_end=window_end,
+            relationships=relationships or None,
+            # Same options as the Deliver bundle's `generate.py`, so both give the same data.
+            # - use_faker: a missing extra fails loudly.
+            # - unique_entity_seeds: same-shaped tables don't share keys.
+            use_faker=True,
+            unique_entity_seeds=True,
+            # A child row copies its parent's partition columns.
+            inherit_partition_columns=True,
+        )
+        if ai_on:
+            kwargs.update(ai=True, ai_provider=ai_provider, ai_model=ai_model)
+        return DataGenerator.generate_related(bronze, **kwargs)
+
+    # Generative mode needs an LLM key (OPENAI_API_KEY / ANTHROPIC_API_KEY /
+    # LAKELOGIC_AI_PROVIDER). If it fails, warn and fall back to deterministic.
+    if not bronze:
+        frames = {}  # only bootstrap contracts in this system
+    elif generative:
+        try:
+            frames = _generate(True)
+        except Exception as exc:  # noqa: BLE001 - fall back, don't fail
+            print(
+                f"[synthetic_seed] generative mode unavailable ({type(exc).__name__}: {exc}); "
+                "falling back to deterministic generation. Configure an LLM provider "
+                "(e.g. OPENAI_API_KEY) in this environment to enable it."
+            )
+            frames = _generate(False)
+    else:
+        frames = _generate(False)
+
+    out: Dict[str, Any] = {}
+    for entity in sorted(frames):  # deterministic order
+        df = frames[entity]
+        # Drop `_is_invalid`; add the synthetic marker.
+        if "_is_invalid" in df.columns:
+            df = df.drop("_is_invalid")
+        out[entity] = df.with_columns(pl.lit(True).alias(_MARKER))
+    for entity, columns in sorted(bootstrap.items()):
+        out[entity] = pl.DataFrame(schema={**{col: pl.Utf8 for col in columns}, _MARKER: pl.Boolean})
+    return out
+
+
+def document_folder(contract_dict: Dict[str, Any], *, landing_root: str, out_root: str) -> Optional[str]:
+    """Folder for a document contract's files: `source.path` up to the first glob, under `out_root`.
+
+    E.g. `{landing_root}/driver_licences/**/*.pdf` -> `<out_root>/driver_licences`.
+    """
+    declared = str(((contract_dict or {}).get("source") or {}).get("path") or "").replace("\\", "/")
+    if not declared:
+        return None
+    root = str(landing_root or "").strip("/")
+    declared = declared.replace("{landing_root}", root)
+    for mount in ("/lakehouse/default/", "lakehouse/default/"):
+        if declared.startswith(mount):
+            declared = declared[len(mount):]
+    parts = []
+    for part in declared.strip("/").split("/"):
+        if any(ch in part for ch in "*?["):
+            break
+        parts.append(part)
+    folder = "/".join(parts)
+    base = out_root.rstrip("/")
+    if root and (folder == root or folder.startswith(root + "/")):
+        tail = folder[len(root):].strip("/")
+        return f"{base}/{tail}" if tail else base
+    return f"{base}/{parts[-1]}" if parts else base
+
+
+def _write_documents(
+    registry_path: str, out_root: str, *, environment: str, storage_mode: str, rows: int,
+    rows_by_entity: Optional[Dict[str, int]], seed: int, invalid_ratio: float, wanted: set,
+) -> List[Dict[str, Any]]:
+    """Write synthetic documents for this system's extraction contracts (lakelogic core)."""
+    from lakelogic.core.registry import DomainRegistry as _Reg
+
+    registry = _Reg.from_yaml(registry_path, environment=environment, storage_mode=storage_mode)
+    landing_root = str(getattr(getattr(registry, "storage", None), "landing_root", "") or "")
+    candidates = [
+        c for c in getattr(registry, "contracts", []) or []
+        if (getattr(c, "contract_dict", None) or {}).get("extraction")
+        and reads_landing(getattr(c, "layer", None), getattr(c, "contract_dict", None))
+        and (not wanted or c.entity.lower() in wanted)
+    ]
+    if not candidates:
+        return []
+    try:
+        from lakelogic.core.synthetic_documents import generate_documents, supports_documents
+    except ImportError:
+        print("[synthetic_seed] this lakelogic has no `lakelogic.core.synthetic_documents`; "
+              f"documents not written for {sorted(c.entity for c in candidates)} - upgrade lakelogic")
+        return []
+    written: List[Dict[str, Any]] = []
+    for c in candidates:
+        doc = c.contract_dict or {}
+        if not supports_documents(doc):
+            continue  # LLM extraction: nothing to render
+        dest = document_folder(doc, landing_root=landing_root, out_root=out_root)
+        if not dest:
+            print(f"[synthetic_seed] {c.entity}: no source.path to write documents to")
+            continue
+        count = max(1, int((rows_by_entity or {}).get(c.entity, rows)))
+        paths = generate_documents(doc, dest, rows=count, seed=seed, invalid_ratio=invalid_ratio)
+        print(f"[synthetic_seed] {c.entity}: {len(paths)} synthetic document(s) -> {dest}")
+        written.append({"entity": c.entity, "rows": len(paths), "path": dest, "format": "pdf",
+                        "partition": None, "declared": True, "batches": len(paths)})
+    return written
+
+
+#: File extension per format.
+_EXT = {"csv": "csv", "json": "json", "parquet": "parquet"}
+
+
+def batch_filename(entity: str, ext: str, *, seed: int = 7, index: int = 0) -> str:
+    """A landing file name like `batch_00_e7cec9.csv`.
+
+    - Same `seed` and `index` => same name, so a re-run with the same seed rewrites its files.
+    - A different seed or index => a new file, so batches accumulate.
+    """
+    import hashlib
+
+    digest = hashlib.sha256(f"{entity}:{seed}:{index}".encode()).hexdigest()[:6]
+    return f"batch_{index:02d}_{digest}.{ext}"
+
+
+def landing_layout(
+    contract_dict: Dict[str, Any], *, landing_root: str, out_root: str, entity: str,
+    at: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    """Where and how an entity's landing files are written, read from its contract.
+
+    Returns:
+    - `path`: `source.path` moved from `landing_root` onto `out_root`, plus the partition.
+      `<out_root>/<entity>` only if no `source.path` is declared.
+    - `format`: `source.format`, per contract (one design can mix json and parquet).
+    - `partition`: `source.partition.format` filled in with `at` (default now, UTC).
+    - `multiline`: the JSON `multiLine` option (default true).
+    """
+    src = ((contract_dict or {}).get("source") or {}) if isinstance(contract_dict, dict) else {}
+    declared = str(src.get("path") or "").strip().rstrip("/")
+    root = str(landing_root or "").strip().rstrip("/")
+    base = out_root.rstrip("/")
+    if declared and root and (declared == root or declared.startswith(root + "/")):
+        tail = declared[len(root):].lstrip("/")
+        dest = f"{base}/{tail}" if tail else base
+    elif declared:
+        # Not under landing_root: use the last segment, to stay inside the zone.
+        dest = f"{base}/{declared.rsplit('/', 1)[-1]}"
+    else:
+        dest = f"{base}/{entity}"
+
+    fmt = str(src.get("format") or "").strip().lower() or None
+    # Match the reader's JSON shape. `multiLine` defaults to true (one JSON value per file);
+    # JSON Lines would then load only the first row of each file.
+    json_opts = (src.get("options") or {}) if isinstance(src.get("options"), dict) else {}
+    multiline = bool(json_opts.get("multiLine", json_opts.get("multiline", True)))
+    part_fmt = str(((src.get("partition") or {}) or {}).get("format") or "").strip()
+    partition = None
+    if part_fmt:
+        stamp = at or datetime.now(timezone.utc)
+        partition = stamp.strftime(part_fmt).strip("/")
+        if partition:
+            dest = f"{dest}/{partition}"
+    return {"path": dest, "format": fmt, "partition": partition, "multiline": multiline}
+
+
+def typed_bronze_schema(bronze_contract: Dict[str, Any], silver_contract: Optional[Dict[str, Any]]) -> str:
+    """The bronze contract as YAML, with silver's types and constraints (`typed_bronze_doc`).
+
+    - Bronze is all-string, so generating from it gives values like `"DIS-9445"` for a
+      number, and silver quarantines every row.
+    - YAML (not a type map) keeps pii, masking and other settings.
+    - No silver consumer: the bronze contract as is.
+    """
+    import yaml as _yaml
+
+    return _yaml.safe_dump(typed_bronze_doc(bronze_contract, silver_contract), sort_keys=False)
+
+
+#: Field keys copied from silver, so rows pass silver's checks.
+_SILVER_FIELD_KEYS = (
+    "type", "required", "accepted_values", "min", "max", "min_length", "max_length",
+    "regex_match", "pattern",
+)  # not `primary_key`: the key is a top-level list (copied below), never a field flag
+#: Structured row rules the generator honours; each names its `field`.
+_STRUCTURED_ROW_RULES = ("accepted_values", "range", "regex_match", "min_length", "max_length")
+#: SQL words that are not column names.
+_SQL_WORDS = frozenset({
+    "and", "or", "not", "is", "null", "in", "like", "ilike", "between", "true", "false",
+})
+
+
+def _sql_rule_columns(sql: str) -> set:
+    """Lower-cased identifiers a SQL row rule reads (string literals ignored).
+
+    Function names and keywords like CASE/CAST also count, so such a rule is never carried.
+    """
+    import re
+
+    without_literals = re.sub(r"'(?:[^']|'')*'", "''", str(sql or ""))
+    names = {m.lower() for m in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", without_literals)}
+    return names - _SQL_WORDS
+
+
+_UNIQUE_COLUMN_KEYS = ("field", "fields", "column", "columns")
+
+
+def _unique_names(value: Any) -> List[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, (list, tuple)):
+        return [v for v in value if isinstance(v, str)]
+    if isinstance(value, dict):
+        out: List[str] = []
+        for key in _UNIQUE_COLUMN_KEYS:
+            if key in value:
+                out.extend(_unique_names(value.get(key)))
+        return out
+    return []
+
+
+def _unique_rule_columns(rule: Any) -> List[str]:
+    """Column(s) a ``unique`` dataset rule covers (``unique: col | [a, b] | {field|columns: ...}``).
+
+    Mirrors ``api.services.check_coverage.unique_rule_columns`` — inlined because this runner is
+    exported verbatim into the customer's notebooks, where the SaaS ``api`` package does not exist."""
+    if not isinstance(rule, dict) or not rule.get("unique"):
+        return []
+    return _unique_names(rule["unique"])
+
+
+def typed_bronze_doc(
+    bronze_contract: Dict[str, Any], silver_contract: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """The bronze contract with silver's field constraints and quality rules copied in.
+
+    - Per shared column: silver's type, `required` and value limits;
+      `foreign_key` only if bronze has none.
+    - Row rules (structured or SQL) and `unique` dataset rules, only if every column
+      they read exists in bronze (a rule on a derived column can't hold at landing).
+    - Silver's table `primary_key` if bronze has none.
+    """
+    import copy
+
+    doc = copy.deepcopy(bronze_contract or {})
+    doc.setdefault("version", "1.0.0")
+    if not silver_contract:
+        return doc
+    silver_fields = {
+        str(f.get("name")): f
+        for f in ((silver_contract.get("model") or {}).get("fields") or [])
+        if isinstance(f, dict) and f.get("name")
+    }
+    columns = set()
+    for field in ((doc.get("model") or {}).get("fields") or []):
+        if not isinstance(field, dict):
+            continue
+        columns.add(str(field.get("name")))
+        declared = silver_fields.get(str(field.get("name")))
+        if not declared:
+            continue
+        for key in _SILVER_FIELD_KEYS:
+            if key in declared and declared[key] is not None:
+                field[key] = copy.deepcopy(declared[key])
+        if not isinstance(field.get("foreign_key"), dict) and isinstance(declared.get("foreign_key"), dict):
+            field["foreign_key"] = copy.deepcopy(declared["foreign_key"])
+
+    silver_quality = silver_contract.get("quality") or {}
+    quality = doc.setdefault("quality", {}) if silver_quality else doc.get("quality")
+    for rule in silver_quality.get("row_rules") or []:
+        if not isinstance(rule, dict):
+            continue
+        names = [k for k in _STRUCTURED_ROW_RULES if isinstance(rule.get(k), dict)]
+        sql = rule.get("sql") if isinstance(rule.get("sql"), str) else None
+        read = _sql_rule_columns(sql) if sql else set()
+        if names and all(str(rule[k].get("field")) in columns for k in names):
+            quality.setdefault("row_rules", []).append(copy.deepcopy(rule))
+        elif sql and read and read <= {c.lower() for c in columns}:
+            quality.setdefault("row_rules", []).append(copy.deepcopy(rule))
+    for rule in silver_quality.get("dataset_rules") or []:
+        wanted = _unique_rule_columns(rule)
+        if wanted and all(str(c) in columns for c in wanted):
+            quality.setdefault("dataset_rules", []).append(copy.deepcopy(rule))
+
+    pk = silver_contract.get("primary_key")
+    pk = [pk] if isinstance(pk, str) else list(pk or [])
+    if pk and all(str(c) in columns for c in pk) and not doc.get("primary_key"):
+        doc["primary_key"] = pk
+    return doc
+
+
+def silver_consumers(registry) -> Dict[str, Dict[str, Any]]:
+    """`{bronze entity: silver contract that reads it}`, matched on silver's `source.path` (`table:...`)."""
+    out: Dict[str, Dict[str, Any]] = {}
+    by_table: Dict[str, str] = {}
+    # Fill `{system}`/`{domain}` too, or paths never match.
+    names = dict(system=str(getattr(registry, "system", "") or ""),
+                 domain=str(getattr(registry, "domain", "") or ""))
+    for c in getattr(registry, "contracts", []) or []:
+        if getattr(c, "layer", None) != "bronze":
+            continue
+        doc = getattr(c, "contract_dict", None) or {}
+        table = str(((doc.get("info") or {}).get("table_name")) or c.entity or "")
+        by_table.setdefault(_resolve_name(table, **names), c.entity)
+        by_table.setdefault(_resolve_name(c.entity, **names), c.entity)
+
+    for c in getattr(registry, "contracts", []) or []:
+        if getattr(c, "layer", None) != "silver":
+            continue
+        doc = getattr(c, "contract_dict", None) or {}
+        path = str(((doc.get("source") or {}) or {}).get("path") or "")
+        if not path.startswith("table:"):
+            continue
+        table = path[len("table:"):].split(".")[-1].strip()
+        entity = by_table.get(_resolve_name(table, **names))
+        if entity:
+            out[entity] = doc
+    return out
+
+
+def _landing_prefix(out_root: str, landing_root: str) -> Optional[str]:
+    """The prefix `out_root` adds before `landing_root` (e.g. `/lakehouse/default/`), or None."""
+    out = str(out_root or "").replace("\\", "/").rstrip("/")
+    root = str(landing_root or "").replace("\\", "/").strip("/")
+    if not root:
+        return None
+    if out == root:
+        return ""
+    if out.endswith("/" + root):
+        return out[: -len(root)]
     return None
 
 
-def domain_layout(catalog: str, domain: str) -> dict:
-    own = own_catalog(catalog, domain)
-    if own:
-        return {
-            "per_domain_catalog": True, "catalog": own,
-            "bronze": f"`{own}`.`bronze`", "silver": f"`{own}`.`silver`", "gold": f"`{own}`.`gold`",
-            "quarantine": f"`{own}`.`quarantine`", "lakelogic": f"`{own}`.`lakelogic`",
-            "landing": f"/Volumes/{own}/files/landing",
-        }
-    one = f"`{catalog}`.`{domain}`"
-    return {
-        "per_domain_catalog": False, "catalog": catalog,
-        "bronze": one, "silver": one, "gold": one, "quarantine": one, "lakelogic": one,
-        "landing": f"/Volumes/{catalog}/nondelta/landing_{domain}",
-    }
+def foreign_key_pools(
+    registry_path: str,
+    out_root: str,
+    missing: List[Dict[str, str]],
+    *,
+    landing_root: str,
+    environment: str = "dev",
+    storage_mode: str = "catalog",
+) -> Dict[Tuple[str, str], List[str]]:
+    """`{(child, child_column): [parent values]}` for FKs whose parent is in another system.
 
-
-def table_of(catalog: str, domain: str, table: str) -> str:
-    """`bronze_x` / `silver_x` / `gold_x` / `quarantine_x` / `_lakelogic_x` -> its full name."""
-    lay = domain_layout(catalog, domain)
-    key = ("quarantine" if table.startswith("quarantine_") else "lakelogic" if table.startswith("_lakelogic")
-           else table.split("_", 1)[0] if table.split("_", 1)[0] in ("bronze", "silver", "gold") else "lakelogic")
-    return f"{lay[key]}.`{table}`"
-
-
-def _uc_fk_ids(domain, table, col, fallback_prefix, n=60):
-    """Distinct FK values from a UC silver table via Spark; synthetic fallback.
-    Lets cross-domain generators (hubspot→rider_id, zendesk→charge_id, …) key off
-    REAL marketplace/payments ids when those layers have already run."""
-    import uuid
-    try:
-        rows = spark.table(table_of(CATALOG, domain, table)).select(col).distinct().limit(5000).collect()
-        vals = [r[0] for r in rows if r[0] is not None]
-        if vals:
-            return vals
-    except Exception as e:  # table missing / not yet built
-        print(f"   WARN could not read {domain}.{table}.{col} ({e}); using synthetic IDs")
-    return [f"{fallback_prefix}-{uuid.uuid4().hex[:8]}" for _ in range(n)]
-
-
-def _marketing_partition_hour(now=None):
-    now = now or datetime.now(timezone.utc)
-    return f"y_{now.strftime('%Y')}/m_{now.strftime('%m')}/d_{now.strftime('%d')}/h_{now.strftime('%H')}"
-
-
-def _write_csv(landing_root, entity, rows):
-    """Write rows to {landing_root}/{entity}/y_/m_/d_/h_/<entity>_seed.csv."""
-    import csv
-    out_dir = Path(landing_root) / entity / _marketing_partition_hour()
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out = out_dir / f"{entity}_seed.csv"
-    with out.open("w", encoding="utf-8", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
-        w.writeheader()
-        w.writerows((rows := rows[:ROWS_PER_TABLE]))
-    print(f"   {entity}: {len(rows)} rows -> {out}")
-
-
-def _gen_trip_events(landing_uri):
-    """Derive trip_requests (JSON) + trip_cancellations (CSV) from the simulator's
-    already-written trip_completed landing, so both are FK-consistent with trips /
-    riders / drivers. Demonstrates the THREE bronze ingest modalities alongside the
-    CSV feeds and the checkr PDF extraction:
-      - trip_requests      → JSON  (semi-structured request events, one array file)
-      - trip_cancellations → CSV
+    - Other systems: sibling `<mesh>/<domain>/<system>/_system.yaml` registries.
+    - Values are read from the parent's landing zone, per its own contract.
+    - A parent that has not landed yet is reported and skipped; seed parent systems first.
     """
-    import glob, json, random, uuid
-    random.seed(43)
-    files = glob.glob(f"{landing_uri}/trip_completed/**/*.csv", recursive=True)
-    trips, seen = [], set()
-    for fp in files:
+    if not missing:
+        return {}
+    prefix = _landing_prefix(out_root, landing_root)
+    if prefix is None:
+        print(f"[synthetic_seed] {out_root} does not end with landing_root {landing_root!r}; "
+              "cannot locate other systems' landing zones - cross-system keys stay generated")
+        return {}
+    import glob
+
+    from lakelogic.core.registry import DomainRegistry as _Reg
+
+    here = os.path.normcase(os.path.abspath(registry_path))
+    mesh_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(registry_path))))
+    owners: Dict[str, Tuple[Dict[str, Any], str, str]] = {}
+    for path in sorted(glob.glob(os.path.join(mesh_root, "*", "*", "_system.yaml"))):
+        if os.path.normcase(os.path.abspath(path)) == here:
+            continue
         try:
-            for t in pl.read_csv(fp, infer_schema_length=0).to_dicts():
-                tid = t.get("trip_id")
-                if tid and tid not in seen:
-                    seen.add(tid); trips.append(t)
-        except Exception as e:
-            print(f"   WARN could not read {fp}: {e}")
-    if not trips:
-        print("   trip_events: no completed trips found — skipping")
-        return
+            reg = _Reg.from_yaml(path, environment=environment, storage_mode=storage_mode)
+        except Exception as exc:  # noqa: BLE001 - skip an unreadable registry
+            print(f"[synthetic_seed] skipped registry {path}: {exc}")
+            continue
+        names = dict(system=str(getattr(reg, "system", "") or ""), domain=str(getattr(reg, "domain", "") or ""))
+        root = str(getattr(getattr(reg, "storage", None), "landing_root", "") or "")
+        consumers = silver_consumers(reg)
+        for c in getattr(reg, "contracts", []) or []:
+            if not reads_landing(getattr(c, "layer", None), getattr(c, "contract_dict", None)):
+                continue
+            doc = getattr(c, "contract_dict", None) or {}
+            keys = [c.entity, doc.get("dataset"), (doc.get("info") or {}).get("table_name")]
+            silver = consumers.get(c.entity)
+            if silver:  # FKs declared on silver name the silver table
+                keys += [silver.get("dataset"), (silver.get("info") or {}).get("table_name")]
+            for key in keys:
+                resolved = _resolve_name(key, **names)
+                if resolved and "{" not in resolved:
+                    owners.setdefault(resolved, (doc, root, c.entity))
 
-    # ── trip_requests (JSON): one request per completed trip + 30% unconverted,
-    #    guaranteeing requested_trips >= completed_trips per (kpi_date, city) ──
-    reqs = []
-    def _req(t, uid):
-        return {
-            "request_id": uid,
-            "rider_id": t.get("rider_id") or f"R-{uuid.uuid4().hex[:8]}",
-            "trip_type": t.get("trip_type") or "ride",
-            "pickup_lat": t.get("pickup_lat", ""), "pickup_lng": t.get("pickup_lng", ""),
-            "dropoff_lat": t.get("dropoff_lat", ""), "dropoff_lng": t.get("dropoff_lng", ""),
-            "city_code": t.get("city_code") or "LON",
-            # Same country as the trip it derives from (the simulator sets it from the city).
-            "country_code": t.get("country_code") or "",
-            "requested_at": t.get("requested_at") or t.get("pickup_at") or "",
-            "estimated_fare": t.get("fare_amount", ""),
-            "estimated_eta_minutes": str(random.randint(2, 12)),
-            "surge_multiplier": t.get("surge_multiplier", "1.0"),
-        }
-    for t in trips:
-        reqs.append(_req(t, f"REQ-{(t.get('trip_id') or uuid.uuid4().hex)[:12]}"))
-    for _ in range(max(1, int(len(trips) * 0.3))):
-        reqs.append(_req(random.choice(trips), f"REQ-U-{uuid.uuid4().hex[:10]}"))
-    part = _marketing_partition_hour()
-    rdir = Path(landing_uri) / "trip_requests" / part
-    rdir.mkdir(parents=True, exist_ok=True)
-    # JSON array file (Spark reads with multiLine=true)
-    (rdir / "trip_requests_seed.json").write_text(json.dumps(reqs), encoding="utf-8")
-
-    # ── trip_cancellations (CSV): ~10% of trips, cancelled at/after request ──
-    cancels = []
-    for t in random.sample(trips, max(1, int(len(trips) * 0.1))):
-        ts = t.get("requested_at") or t.get("pickup_at") or ""
-        cancels.append({
-            "cancellation_id": f"CAN-{uuid.uuid4().hex[:10]}",
-            "trip_id": t.get("trip_id", ""),
-            "rider_id": t.get("rider_id", ""),
-            "driver_id": t.get("driver_id", ""),
-            "cancelled_by": random.choice(["rider", "driver"]),
-            "cancel_reason_code": random.choice(["rider_no_show", "driver_cancel", "long_wait", "price_change", "other"]),
-            "city_code": t.get("city_code", "LON"),
-            "country_code": t.get("country_code", ""),
-            "requested_at": ts,
-            "cancelled_at": ts,
-            "cancellation_fee": str(round(random.uniform(0, 5), 2)),
-        })
-    _write_csv(landing_uri, "trip_cancellations", cancels)
-    print(f"   trip_requests(JSON): {len(reqs)} | trip_cancellations(CSV): {len(cancels)}")
+    pools: Dict[Tuple[str, str], List[str]] = {}
+    for miss in missing:
+        hit = owners.get(miss["parent_contract"])
+        if hit is None:
+            print(f"[synthetic_seed] {miss['parent_contract']} is in no system of this mesh")
+            continue
+        doc, root, entity = hit
+        layout = landing_layout(doc, landing_root=root, out_root=prefix + root.strip("/"), entity=entity, at=None)
+        path, partition = layout["path"], layout.get("partition")
+        base = path[: -(len(partition) + 1)] if partition and path.endswith("/" + partition) else path
+        values = _existing_values(base, (layout.get("format") or "delta").lower(),
+                                  miss["parent_column"], layout.get("multiline", True))
+        if values:
+            pools[(miss["child"], miss["child_column"])] = values
+            print(f"[synthetic_seed] {miss['child']}.{miss['child_column']} -> {len(values)} landed "
+                  f"{entity}.{miss['parent_column']} value(s)")
+        else:
+            print(f"[synthetic_seed] {entity} has not landed yet; {miss['child']}.{miss['child_column']} "
+                  "stays generated - seed that system first")
+    return pools
 
 
-# ── marketplace/rideflow — native simulator + edge cases ─────────────────────
-def gen_marketplace_rideflow(registry, landing_uri):
-    import uuid, random
-    sim = StreamingSimulator.rideflow_marketplace(
-        landing_root=landing_uri, window_minutes=60,
-        start_time=datetime.now(timezone.utc) - timedelta(hours=NUM_WINDOWS),
-        seed=42, initial_riders=ROWS_PER_TABLE, initial_drivers=max(ROWS_PER_TABLE // 2, 10),
-    )
-    total_rows, windows = 0, []
-    for window in sim.run(num_windows=NUM_WINDOWS, micro_batches=1, up_to=datetime.now(timezone.utc), resume=True):
-        windows.append(window); total_rows += window.total_rows
-    print(f"   {total_rows:,} rows across {len(windows)} window(s)" if windows else "   (simulator caught up — no new windows)")
-    fk = sim.validate_fk_consistency()
-    print(f"   🔗 FK pools: {fk['total_riders']} riders / {fk['total_drivers']} drivers  healthy={fk['fk_pools_healthy']}")
+def _apply_foreign_pools(frames: Dict[str, Any], pools: Dict[Tuple[str, str], List[str]], seed: int) -> Dict[str, Any]:
+    """Set each cross-system FK to a random landed parent value."""
+    if not pools:
+        return frames
+    import polars as pl
 
-    # Derive request/cancellation events from the clean simulator trips (before the
-    # deliberately-broken edge cases below). trip_requests lands as JSON.
-    _gen_trip_events(landing_uri)
-
-    if not INJECT_EDGE_CASES:
-        return
-    random.seed(42)
-    # city -> country: the contract carries country_code after city_code, and bronze CSV is
-    # read by POSITION, so a missing column shifted every later value one place left.
-    city_country = {"LON": "GB", "NYC": "US", "BER": "DE", "PAR": "FR", "TYO": "JP", "SYD": "AU"}
-    cities = list(city_country)
-    # Scaled to the seed size: a fixed 800 bad rows swamped a 100-row seed (39% quarantined).
-    n_edge = max(ROWS_PER_TABLE, 80)
-    scale = lambda k: round(k * n_edge / 800)
-    base_time = datetime.now(timezone.utc).replace(hour=8, minute=0, second=0, microsecond=0)
-    records = []
-    for i in range(n_edge):
-        req_dt = base_time.replace(hour=random.randint(7, 22), minute=random.randint(0, 59))
-        records.append({
-            "trip_id": str(uuid.uuid4()), "rider_id": f"R-{uuid.uuid4().hex[:8]}", "driver_id": f"D-{uuid.uuid4().hex[:8]}",
-            "trip_type": random.choice(["ride", "eats_delivery"]),
-            "pickup_lat": str(round(random.uniform(51.4, 51.6), 6)), "pickup_lng": str(round(random.uniform(-0.2, 0.1), 6)),
-            "dropoff_lat": str(round(random.uniform(51.4, 51.6), 6)), "dropoff_lng": str(round(random.uniform(-0.2, 0.1), 6)),
-            "city_code": (city := random.choice(cities)), "country_code": city_country[city],
-            "requested_at": req_dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "pickup_at": (req_dt + timedelta(minutes=2)).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "dropoff_at": (req_dt + timedelta(minutes=20)).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "distance_km": str(round(random.uniform(1, 25), 1)), "duration_minutes": str(random.randint(5, 45)),
-            "fare_amount": str(round(random.uniform(5, 80), 2)), "surge_multiplier": str(round(random.uniform(1.0, 3.5), 2)),
-            "tip_amount": str(round(random.uniform(0, 10), 2)),
-            "payment_method": random.choice(["card", "apple_pay", "google_pay", "cash"]),
-            "rider_rating": str(random.randint(1, 5)), "driver_rating": str(random.randint(1, 5)), "notes": "",
-        })
-    for i in range(0, scale(120)):   records[i]["fare_amount"] = "-15.50"                       # TC-001 negative fare
-    for i in range(scale(120), scale(200)): records[i]["driver_id"] = records[i]["rider_id"]           # TC-002 self-service
-    for i in range(scale(200), scale(350)):                                                            # TC-003 time travel
-        records[i]["pickup_at"]  = (base_time + timedelta(hours=4)).strftime("%Y-%m-%dT%H:%M:%SZ")
-        records[i]["dropoff_at"] = (base_time + timedelta(hours=3)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    for i in range(scale(350), scale(450)): records[i]["distance_km"] = "650.5"                        # TC-004 impossible trip
-    for i in range(scale(450), scale(600)): records[i]["notes"] = "DROP TABLE trips; SELECT * FROM users;"  # TC-005 injection
-    for i in range(scale(600), scale(680)): records[i]["surge_multiplier"] = "5.8"                     # TC-006 cap violation
-    for i in range(scale(680), scale(740)): records[i]["city_code"] = "XYZ"                            # TC-007 unknown market
-    dup_id = records[0]["trip_id"]
-    for i in range(scale(740), n_edge): records[i]["trip_id"] = dup_id                             # TC-008 duplicate id
-    random.shuffle(records)
-    part_str = f"y_{base_time.strftime('%Y')}/m_{base_time.strftime('%m')}/d_{base_time.strftime('%d')}/h_99"
-    edge_path = f"{landing_uri}/trip_completed/{part_str}/edge_cases.csv"
-    os.makedirs(os.path.dirname(edge_path), exist_ok=True)
-    pl.DataFrame(records).write_csv(edge_path)
-    print(f"   injected {n_edge} edge cases (TC-001..TC-008) → {edge_path}")
+    rng = random.Random(seed)
+    for (child, column), pool in sorted(pools.items()):
+        df = frames.get(child)
+        if df is None or column not in df.columns or not pool:
+            continue
+        values = [pool[rng.randrange(len(pool))] for _ in range(df.height)]
+        frames[child] = df.with_columns(pl.Series(column, values).cast(df.schema[column], strict=False))
+    return frames
 
 
-# ── marketing wave ───────────────────────────────────────────────────────────
-def gen_marketing_google_ads(registry, landing_uri):
-    import random, uuid
-    random.seed(42); now = datetime.now(timezone.utc)
-    campaign_pool = [("camp_" + uuid.uuid4().hex[:8], n) for n in ["RideFlow Brand UK", "Eats Delivery US", "Driver Recruit DE", "Surge Promo EU"]]
-    rows = []
-    for c_id, c_name in campaign_pool:
-        for d_offset in range(14):
-            date = (now - timedelta(days=d_offset)).date().isoformat()
-            for ag in range(random.randint(2, 4)):
-                rows.append({
-                    "campaign_id": c_id, "campaign_name": c_name,
-                    "ad_group_id": f"ag_{uuid.uuid4().hex[:8]}", "ad_group_name": f"{c_name} - AG{ag+1}",
-                    "date": date, "impressions": str(random.randint(1000, 50000)), "clicks": str(random.randint(20, 2500)),
-                    "cost": f"{random.uniform(50, 800):.2f}", "conversions": str(random.randint(0, 80)),
-                    "conversion_value": f"{random.uniform(0, 1500):.2f}", "currency": random.choice(["GBP", "USD", "EUR"]),
-                })
-    _write_csv(landing_uri, "campaigns", rows)
+def seed_relationships(
+    registry, *, unresolved: Optional[List[Dict[str, str]]] = None, quiet: bool = False,
+) -> List[Dict[str, str]]:
+    """FK edges for a system's synthetic data. Used by both seed and extend.
+
+    - Read from contracts with silver's constraints applied, so silver-only FKs count.
+    - A silver table name is an alias for the bronze entity that feeds it.
+    - Parents in another system go to `unresolved` and are printed unless `quiet`.
+    """
+    system = str(getattr(registry, "system", "") or "")
+    domain = str(getattr(registry, "domain", "") or "")
+    consumers = silver_consumers(registry)
+    docs: Dict[str, Dict[str, Any]] = {}
+    aliases: Dict[str, str] = {}
+    for c in getattr(registry, "contracts", []) or []:
+        if not reads_landing(getattr(c, "layer", None), getattr(c, "contract_dict", None)):
+            continue
+        silver = consumers.get(c.entity)
+        docs[c.entity] = typed_bronze_doc(getattr(c, "contract_dict", None) or {}, silver)
+        if silver:
+            for key in (silver.get("dataset"), (silver.get("info") or {}).get("table_name")):
+                if key:
+                    aliases[str(key)] = c.entity
+    missing: List[Dict[str, str]] = [] if unresolved is None else unresolved
+    rels = contract_relationships(docs, aliases=aliases, system=system, domain=domain, unresolved=missing)
+    for miss in [] if quiet else missing:
+        print(f"[synthetic_seed] {miss['child']}.{miss['child_column']} -> {miss['parent_contract']} "
+              "is in another system; values come from its landing zone")
+    return rels
 
 
-def gen_marketing_google_analytics(registry, landing_uri):
-    import random, uuid
-    random.seed(43); now = datetime.now(timezone.utc)
-    iso = lambda dt: dt.replace(microsecond=0, tzinfo=None).isoformat() + "Z"
-    user_pool = [uuid.uuid4().hex for _ in range(80)]
-    rider_ids = _uc_fk_ids("marketplace", "silver_rideflow_rider_profiles", "rider_id", "R", 80)
-    events = []
-    for _ in range(400):
-        ts = now - timedelta(minutes=random.randint(0, 60*24*7))
-        events.append({
-            "event_name": random.choice(["app_open", "trip_requested", "trip_completed", "payment_method_added", "signup"]),
-            "event_timestamp": str(int(ts.timestamp() * 1_000_000)), "event_date": ts.date().isoformat(),
-            "user_pseudo_id": random.choice(user_pool), "user_id": random.choice(rider_ids) if rider_ids else "",
-            "device_id": uuid.uuid4().hex[:16], "ip_address": f"10.{random.randint(0,255)}.{random.randint(0,255)}.{random.randint(1,254)}",
-            "device_category": random.choice(["mobile", "desktop", "tablet"]), "device_os": random.choice(["iOS", "Android", "Web"]),
-            "geo_country": random.choice(["GB", "US", "DE", "FR", "JP"]), "geo_city": random.choice(["London", "NYC", "Berlin", "Paris", "Tokyo"]),
-            "app_version": random.choice(["4.18.0", "4.18.1", "4.19.0"]), "event_params_json": '{"source":"seed"}',
-        })
-    _write_csv(landing_uri, "app_events", events)
-    sessions = []
-    for _ in range(200):
-        start = now - timedelta(minutes=random.randint(0, 60*24*7))
-        sessions.append({
-            "session_id": uuid.uuid4().hex, "user_pseudo_id": random.choice(user_pool), "user_id": random.choice(rider_ids) if rider_ids else "",
-            "ip_address": f"10.{random.randint(0,255)}.{random.randint(0,255)}.{random.randint(1,254)}", "session_start": iso(start),
-            "session_duration_seconds": str(random.randint(15, 1800)), "page_views": str(random.randint(1, 20)),
-            "traffic_source": random.choice(["google", "facebook", "direct", "email"]), "traffic_medium": random.choice(["cpc", "organic", "referral", "email"]),
-            "traffic_campaign": random.choice(["summer-2026", "london-brand", "", "driver-recruit"]),
-            "device_category": random.choice(["mobile", "desktop", "tablet"]), "geo_country": random.choice(["GB", "US", "DE", "FR", "JP"]),
-            "landing_page": random.choice(["/home", "/signup", "/drivers", "/eats", "/pricing"]),
-        })
-    _write_csv(landing_uri, "sessions", sessions)
+def _resolve_layers(name: str) -> str:
+    """Replace `{bronze_layer}`-style placeholders with the layer name."""
+    out = str(name or "")
+    for token, word in (("bronze_layer", "bronze"), ("silver_layer", "silver"), ("gold_layer", "gold")):
+        out = out.replace("{" + token + "}", word)
+    return out
 
 
-def gen_marketing_hubspot(registry, landing_uri):
-    import random, uuid
-    random.seed(44); now = datetime.now(timezone.utc)
-    iso = lambda dt: dt.replace(microsecond=0, tzinfo=None).isoformat() + "Z"
-    rider_ids = _uc_fk_ids("marketplace", "silver_rideflow_rider_profiles", "rider_id", "R", 80)
-    campaigns_pool = [(uuid.uuid4().hex[:12], n) for n in ["Weekly Digest", "Driver Bonus", "Surge Alert", "Welcome Series"]]
-    email_rows = []
-    for _ in range(180):
-        c_id, c_name = random.choice(campaigns_pool)
-        sent = now - timedelta(hours=random.randint(0, 24*14))
-        opened = sent + timedelta(hours=random.randint(1, 24)) if random.random() < 0.45 else None
-        clicked = (opened or sent) + timedelta(minutes=random.randint(1, 90)) if random.random() < 0.25 else None
-        email_rows.append({
-            "campaign_id": c_id, "recipient_email": f"user{random.randint(1,9999)}@example.com",
-            "recipient_name": random.choice(["Aisha", "Carlos", "Mei", "Femi", "Liam"]) + " " + random.choice(["Patel", "Smith", "Chen", "Okafor", "Brown"]),
-            "campaign_name": c_name, "subject_line": random.choice(["Your weekly RideFlow update", "Earn 2x this weekend", "Surge alert near you", "Welcome aboard"]),
-            "sent_at": iso(sent), "opened_at": iso(opened) if opened else "", "clicked_at": iso(clicked) if clicked else "",
-            "bounced": "true" if random.random() < 0.03 else "false", "unsubscribed": "true" if random.random() < 0.02 else "false",
-        })
-    _write_csv(landing_uri, "email_campaigns", email_rows)
-    push_rows = []
-    for _ in range(220):
-        sent = now - timedelta(hours=random.randint(0, 24*7))
-        delivered = sent + timedelta(seconds=random.randint(1, 30)) if random.random() < 0.95 else None
-        opened = (delivered or sent) + timedelta(minutes=random.randint(1, 120)) if random.random() < 0.30 else None
-        push_rows.append({
-            "notification_id": uuid.uuid4().hex, "rider_id": random.choice(rider_ids), "device_token": uuid.uuid4().hex,
-            "campaign_name": random.choice([n for _, n in campaigns_pool]), "sent_at": iso(sent),
-            "delivered_at": iso(delivered) if delivered else "", "opened_at": iso(opened) if opened else "", "platform": random.choice(["ios", "android"]),
-        })
-    _write_csv(landing_uri, "push_notifications", push_rows)
+def dedup_keys_declared(contract_dict: Dict[str, Any]) -> List[str]:
+    """Key columns of the contract's `deduplicate` transformation (`["*"]` if none named), or `[]`."""
+    for xf in (contract_dict or {}).get("transformations") or ():
+        dedup = xf.get("deduplicate") if isinstance(xf, dict) else None
+        if isinstance(dedup, dict):
+            keys = dedup.get("keys") or dedup.get("subset") or dedup.get("columns")
+            if isinstance(keys, str):
+                return [keys]
+            if isinstance(keys, (list, tuple)):
+                return [str(k) for k in keys]
+            return ["*"]
+    return []
 
 
-def gen_marketing_meta_ads(registry, landing_uri):
-    import random, uuid, json as _json
-    random.seed(45); now = datetime.now(timezone.utc)
-    campaign_pool = [("meta_" + uuid.uuid4().hex[:8], n) for n in ["FB Reels Brand", "IG Stories Driver", "Audience Network Eats", "Lookalike Riders"]]
-    rows = []
-    for c_id, c_name in campaign_pool:
-        for d_offset in range(14):
-            date = (now - timedelta(days=d_offset)).date().isoformat()
-            for adset in range(random.randint(2, 4)):
-                impressions = random.randint(2000, 90000)
-                clicks = int(impressions * random.uniform(0.005, 0.04))
-                conversions = int(clicks * random.uniform(0.01, 0.08))
-                rows.append({
-                    "campaign_id": c_id, "campaign_name": c_name, "adset_id": f"as_{uuid.uuid4().hex[:8]}", "adset_name": f"{c_name} - AS{adset+1}",
-                    "date": date, "impressions": str(impressions), "clicks": str(clicks), "spend": f"{random.uniform(80, 1200):.2f}",
-                    "actions_json": f"link_click|{clicks}",  # pipe, not JSON: CSV reader has no escape opt
-                    "conversions": str(conversions), "currency": random.choice(["GBP", "USD", "EUR"]),
-                })
-    _write_csv(landing_uri, "campaigns", rows)
+def inject_duplicates(df, ratio: float, seed: int):
+    """Re-append `ratio` of the rows (sampled by `seed`) so dedup has work to do."""
+    if ratio <= 0 or df.height == 0:
+        return df
+    n = max(1, int(round(df.height * ratio)))
+    return df.vstack(df.sample(n=min(n, df.height), seed=seed, with_replacement=False))
 
 
-# ── payments wave ────────────────────────────────────────────────────────────
-def gen_payments_stripe(registry, landing_uri):
-    import csv, random, uuid
-    random.seed(42); landing_root = Path(landing_uri)
-    rider_ids  = _uc_fk_ids("marketplace", "silver_rideflow_rider_profiles",  "rider_id",  "R", 80)
-    driver_ids = _uc_fk_ids("marketplace", "silver_rideflow_driver_profiles", "driver_id", "D", 60)
-    trip_ids   = _uc_fk_ids("marketplace", "silver_rideflow_trips",           "trip_id",   "T", 200)
-    print(f"   marketplace pool: {len(rider_ids)} riders / {len(driver_ids)} drivers / {len(trip_ids)} trips")
-    now = datetime.now(timezone.utc)
-    part = f"y_{now.strftime('%Y')}/m_{now.strftime('%m')}/d_{now.strftime('%d')}"
-    iso = lambda dt: dt.replace(microsecond=0, tzinfo=None).isoformat() + "Z"
+def _write_entity(
+    df, dest: str, entity: str, entity_fmt: str, layout: Dict[str, Any],
+    *, batches: int, seed: int, write_mode: str,
+) -> List[str]:
+    """Write one entity to `dest` in its format; return the paths written.
 
-    def _write(entity, rows):
-        out_dir = landing_root / entity / part; out_dir.mkdir(parents=True, exist_ok=True)
-        out = out_dir / f"{entity}_seed.csv"
-        with out.open("w", encoding="utf-8", newline="") as f:
-            w = csv.DictWriter(f, fieldnames=list(rows[0].keys())); w.writeheader(); w.writerows((rows := rows[:ROWS_PER_TABLE]))
-        print(f"   ↳ {entity}: {len(rows)} rows → {out}")
-
-    CCYS = ["GBP", "USD", "EUR"]; PM = ["card", "apple_pay", "google_pay"]
-    charges = [{
-        "charge_id": f"ch_{uuid.uuid4().hex[:24]}", "rider_id": random.choice(rider_ids), "trip_id": random.choice(trip_ids) if trip_ids else "",
-        "amount": str(random.randint(500, 8500)), "currency": random.choice(CCYS),
-        "status": random.choices(["succeeded", "failed", "pending"], weights=[92, 5, 3])[0],
-        "payment_method_type": random.choice(PM), "card_last_four": f"{random.randint(0,9999):04d}",
-        "billing_email": f"user{random.randint(1,9999)}@example.com", "billing_address": f"{random.randint(1,200)} Demo St, London",
-        "created_at": iso(now - timedelta(minutes=random.randint(0, 60*24*14))), "metadata_json": '{"source":"seed"}',
-    } for _ in range(min(800, max(200, len(trip_ids))))]
-    _write("charges", charges)
-    payouts = [{
-        "payout_id": f"po_{uuid.uuid4().hex[:24]}", "driver_id": random.choice(driver_ids),
-        "amount": str(random.randint(2000, 35000)), "currency": random.choice(CCYS),
-        "status": random.choices(["paid", "pending", "failed"], weights=[88, 9, 3])[0],
-        "payout_email": f"driver{random.randint(1,9999)}@example.com", "bank_account_last_four": f"{random.randint(0,9999):04d}",
-        "arrival_date": (now - timedelta(days=random.randint(0,14)) + timedelta(days=2)).date().isoformat(),
-        "created_at": iso(now - timedelta(days=random.randint(0,14))),
-    } for _ in range(min(300, max(50, len(driver_ids)*3)))]
-    _write("payouts", payouts)
-    refunds = []
-    for ch in random.sample(charges, k=max(20, len(charges)//16)):
-        ts = datetime.fromisoformat(ch["created_at"].rstrip("Z")) + timedelta(hours=random.randint(1, 72))
-        refunds.append({
-            "refund_id": f"re_{uuid.uuid4().hex[:24]}", "charge_id": ch["charge_id"], "rider_id": ch["rider_id"],
-            "amount": str(int(int(ch["amount"]) * random.uniform(0.3, 1.0))), "currency": ch["currency"],
-            "status": random.choices(["succeeded", "pending", "failed"], weights=[90, 7, 3])[0],
-            "reason": random.choice(["requested_by_customer", "duplicate", "fraudulent"]),
-            "refund_reason": "Customer reported double-charge", "created_at": iso(ts),
-        })
-    _write("refunds", refunds)
-
-
-# ── operations wave ──────────────────────────────────────────────────────────
-def gen_operations_twilio(registry, landing_uri):
-    import csv, random, uuid
-    random.seed(46); now = datetime.now(timezone.utc)
-    iso = lambda dt: dt.replace(microsecond=0, tzinfo=None).isoformat() + "Z"
-    out_dir = Path(landing_uri) / "sms_logs" / _marketing_partition_hour(now); out_dir.mkdir(parents=True, exist_ok=True)
-    twilio_number = "+15558675309"
-    bodies = {
-        "outbound": ["RideFlow: Your driver is 3 mins away.", "RideFlow: Driver has arrived at pickup.", "RideFlow Eats: Order on its way!", "Driver dispatch: New trip available, surge 1.4x.", "Verification code: 482910"],
-        "inbound": ["Driver was late but courteous", "I left my phone in the car, can you help?", "STOP", "Why was I charged twice?", "Great trip, 5 stars"],
-    }
-    rows = []
-    for _ in range(300):
-        direction = random.choices(["outbound", "inbound"], weights=[70, 30])[0]
-        sent = now - timedelta(minutes=random.randint(0, 60*24*7))
-        delivered = sent + timedelta(seconds=random.randint(1, 30)) if random.random() < 0.95 else None
-        user_phone = f"+1{random.randint(2000000000, 9999999999)}"
-        rows.append({
-            "message_sid": "SM" + uuid.uuid4().hex[:30],
-            "recipient_phone": user_phone if direction == "outbound" else twilio_number,
-            "sender_phone": twilio_number if direction == "outbound" else user_phone,
-            "message_body": random.choice(bodies[direction]),
-            "status": random.choices(["delivered", "sent", "failed", "undelivered"], weights=[88, 7, 3, 2])[0],
-            "direction": direction, "num_segments": str(random.choice([1, 1, 1, 2])),
-            "price": f"-{random.uniform(0.005, 0.025):.4f}", "price_unit": "USD",
-            "sent_at": iso(sent), "delivered_at": iso(delivered) if delivered else "", "error_code": "30003" if random.random() < 0.03 else "",
-        })
-    out = out_dir / "sms_logs_seed.csv"
-    with out.open("w", encoding="utf-8", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=list(rows[0].keys())); w.writeheader(); w.writerows((rows := rows[:ROWS_PER_TABLE]))
-    print(f"   sms_logs: {len(rows)} rows -> {out}")
+    - Shared by seed and extend, so both lay out files the same way.
+    - File names come from `seed`; extend passes a per-window seed, so a replayed
+      window rewrites its own files instead of adding duplicates.
+    """
+    if entity_fmt == "delta":
+        # Delta is one table: no batches.
+        df.write_delta(dest, mode=write_mode)
+        written = [dest]
+    else:
+        # Batch files, like a real landing zone.
+        os.makedirs(dest, exist_ok=True)
+        if df.height == 0:
+            # Header-only file: the reader needs the folder; `external_logic` makes the rows.
+            target = f"{dest}/{batch_filename(entity, _EXT[entity_fmt], seed=seed, index=0)}"
+            if entity_fmt == "json":
+                with open(target, "w", encoding="utf-8") as fh:
+                    fh.write("[]" if layout.get("multiline", True) else "")
+            elif entity_fmt == "csv":
+                _single_line_text(df).write_csv(target)
+            else:
+                df.write_parquet(target)
+            return [target]
+        n = max(1, int(batches))
+        size = max(1, -(-df.height // n))  # ceil: every row in one batch
+        written = []
+        for i in range(n):
+            part = df.slice(i * size, size)
+            if part.height == 0:
+                break
+            target = f"{dest}/{batch_filename(entity, _EXT[entity_fmt], seed=seed, index=i)}"
+            if entity_fmt == "json":
+                # `multiLine` (default): one JSON array per file.
+                if layout.get("multiline", True):
+                    with open(target, "w", encoding="utf-8") as fh:
+                        fh.write(part.write_json())
+                else:
+                    part.write_ndjson(target)
+            elif entity_fmt == "csv":
+                _single_line_text(part).write_csv(target)
+            else:
+                part.write_parquet(target)
+            written.append(target)
+    return written
 
 
-def gen_operations_zendesk(registry, landing_uri):
-    import csv, random, uuid, json as _json
-    random.seed(47); now = datetime.now(timezone.utc)
-    iso = lambda dt: dt.replace(microsecond=0, tzinfo=None).isoformat() + "Z"
-    out_dir = Path(landing_uri) / "support_tickets" / _marketing_partition_hour(now); out_dir.mkdir(parents=True, exist_ok=True)
-    rider_ids  = _uc_fk_ids("marketplace", "silver_rideflow_rider_profiles",  "rider_id",  "R", 80)
-    driver_ids = _uc_fk_ids("marketplace", "silver_rideflow_driver_profiles", "driver_id", "D", 60)
-    trip_ids   = _uc_fk_ids("marketplace", "silver_rideflow_trips",           "trip_id",   "T", 200)
-    charge_ids = _uc_fk_ids("payments",    "silver_stripe_charges",           "charge_id", "ch", 200)
-    subjects = {
-        "trip": ["Trip never arrived", "Driver took a longer route", "Lost item in vehicle", "Driver cancelled at last minute"],
-        "payment": ["Double charge on my card", "Surge pricing seems wrong", "Refund request", "Promo code didn't apply"],
-        "safety": ["Safety concern with driver", "Inappropriate behaviour", "Vehicle was unsafe"],
-        "account": ["Can't log in to app", "Phone number change", "Update payment method"],
-        "general": ["Other feedback", "App crashing on launch", "Where is my receipt?"],
-    }
-    rows = []
-    for _ in range(220):
-        topic = random.choices(list(subjects), weights=[40, 30, 5, 15, 10])[0]
-        created = now - timedelta(hours=random.randint(0, 24*14))
-        status = random.choices(["new", "open", "pending", "solved", "closed"], weights=[5, 12, 8, 55, 20])[0]
-        priority = random.choices(["low", "normal", "high", "urgent"], weights=[30, 50, 18, 2])[0]
-        solved_at = created + timedelta(hours=random.randint(1, 96)) if status in ("solved", "closed") else None
-        rows.append({
-            "ticket_id": "zd_" + uuid.uuid4().hex[:24], "entry_point": random.choice(["in_app_help", "email", "web_form", "twitter"]),
-            "rider_id": random.choice(rider_ids) if rider_ids else "",
-            "trip_id": random.choice(trip_ids) if trip_ids and topic in ("trip", "safety") else "",
-            "driver_id": random.choice(driver_ids) if driver_ids and topic in ("trip", "safety") else "",
-            "charge_id": random.choice(charge_ids) if charge_ids and topic == "payment" else "",
-            "requester_email": f"user{random.randint(1, 9999)}@example.com",
-            "requester_name": random.choice(["Aisha", "Carlos", "Mei", "Femi", "Liam"]) + " " + random.choice(["Patel", "Smith", "Chen", "Okafor", "Brown"]),
-            "requester_phone": f"+1{random.randint(2000000000, 9999999999)}", "subject": random.choice(subjects[topic]),
-            "ticket_description": random.choice(subjects[topic]) + " — additional context added by rider.",
-            "status": status, "priority": priority, "channel": random.choice(["chat", "email", "phone"]),
-            "assignee": random.choice(["support_t1_01", "support_t1_02", "support_t2_01", ""]),
-            "tags_json": f"{topic}|{priority}", "created_at": iso(created),  # pipe, not JSON (CSV-safe)
-            "updated_at": iso(created + timedelta(minutes=random.randint(5, 60))), "solved_at": iso(solved_at) if solved_at else "",
-            "satisfaction_rating": random.choice(["good", "bad", ""]) if status in ("solved", "closed") else "",
-        })
-    out = out_dir / "support_tickets_seed.csv"
-    with out.open("w", encoding="utf-8", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=list(rows[0].keys())); w.writeheader(); w.writerows((rows := rows[:ROWS_PER_TABLE]))
-    print(f"   support_tickets: {len(rows)} rows -> {out}")
+# ── Stream extension ─────────────────────────────────────────────────────────────────────
+#
+# Each run appends time windows from the latest landed partition up to now.
+# - Parents only gain new rows.
+# - Children point at parents that have landed.
 
-
-def gen_operations_checkr(registry, landing_uri):
-    import csv, random, uuid
-    random.seed(48); now = datetime.now(timezone.utc)
-    iso = lambda dt: dt.replace(microsecond=0, tzinfo=None).isoformat() + "Z"
-    driver_ids = _uc_fk_ids("marketplace", "silver_rideflow_driver_profiles", "driver_id", "D", 60)
-    first_names = ["Aisha", "Carlos", "Dmitri", "Elena", "Femi", "Hiroshi", "Isla", "Jamal", "Kira", "Liam", "Mei", "Noor"]
-    last_names  = ["Patel", "Smith", "Nakamura", "Okafor", "Rodriguez", "Chen", "Kowalski", "Garcia", "Singh", "Brown", "Adeyemi", "Volkov"]
-    # background_checks CSV (FK -> driver_id)
-    part = f"y_{now.strftime('%Y')}/m_{now.strftime('%m')}/d_{now.strftime('%d')}"
-    bc_dir = Path(landing_uri) / "background_checks" / part; bc_dir.mkdir(parents=True, exist_ok=True)
-    bc_rows = []
-    for driver_id in driver_ids:
-        completed = now - timedelta(days=random.randint(0, 365))
-        result = random.choices(["clear", "consider", "suspended"], weights=[88, 10, 2])[0]
-        adjud = {"clear": "eligible", "consider": "manual_review", "suspended": "ineligible"}[result]
-        bc_rows.append({
-            "report_id": "chk_" + uuid.uuid4().hex[:24], "driver_id": driver_id,
-            "full_name": f"{random.choice(first_names)} {random.choice(last_names)}",
-            "date_of_birth": f"{random.randint(1960,2002)}-{random.randint(1,12):02d}-{random.randint(1,28):02d}",
-            "ssn_last_four": f"{random.randint(0,9999):04d}", "licence_number": f"DL-{uuid.uuid4().hex[:8].upper()}",
-            "address": f"{random.randint(1,9999)} {random.choice(['Main','Oak','High','Park'])} St, London",
-            "status": "complete", "result": result, "completed_at": iso(completed),
-            "created_at": iso(completed - timedelta(days=random.randint(1, 7))), "adjudication": adjud,
-        })
-    if bc_rows:
-        out = bc_dir / "background_checks_seed.csv"
-        with out.open("w", encoding="utf-8", newline="") as f:
-            w = csv.DictWriter(f, fieldnames=list(bc_rows[0].keys())); w.writeheader(); w.writerows((bc_rows := bc_rows[:ROWS_PER_TABLE]))
-        print(f"   background_checks: {len(bc_rows)} rows -> {out}")
-    # driver_licence PDFs (parsed by the pdfplumber extraction contract)
-    try:
-        from reportlab.pdfgen import canvas
-        from reportlab.lib.pagesizes import letter
-    except ImportError:
-        print("   WARN reportlab not installed; skipping licence PDFs"); return
-    pdf_dir = Path(landing_uri) / "driver_licences" / part; pdf_dir.mkdir(parents=True, exist_ok=True)
-    classes_pool = ["B", "C1", "C+E", "D1", "PCO"]
-    for idx in range(30):
-        licence_no = f"{random.choice(['CHK','UK','DL'])}-{idx:04d}{random.randint(1000,9999):04d}"
-        licence_text = "MISSING" if random.random() < 0.05 else licence_no
-        c = canvas.Canvas(str(pdf_dir / f"licence_{licence_no}.pdf"), pagesize=letter)
-        c.setFont("Helvetica-Bold", 16); c.drawString(72, 720, "UK DRIVER LICENCE (Synthetic - Test Data)")
-        c.setFont("Helvetica", 12)
-        c.drawString(72, 680, f"Name: {random.choice(first_names)} {random.choice(last_names)}")
-        c.drawString(72, 660, f"Licence No: {licence_text}")
-        c.drawString(72, 640, f"DOB: {random.randint(1960,2002)}-{random.randint(1,12):02d}-{random.randint(1,28):02d}")
-        c.drawString(72, 620, f"EXP: {random.randint(2024,2032)}-{random.randint(1,12):02d}-{random.randint(1,28):02d}")
-        c.drawString(72, 600, f"Classes: {', '.join(random.sample(classes_pool, k=random.randint(1,3)))}")
-        c.save()
-    print(f"   30 synthetic licence PDFs -> {pdf_dir}")
-
-
-# ── reference wave — static lookup/seed CSVs ─────────────────────────────────
-def gen_reference_internal(registry, landing_uri):
-    """Synthetic reference-data seed CSVs (cities, fx rates, gold-from-landing seed
-    dimensions). One dir per entity so the bronze/gold contracts that read
-    {landing_root}/<entity> pick them up."""
-    import csv, calendar
-    root = Path(landing_uri)
-
-    def _w(entity, rows):
-        out_dir = root / entity
-        out_dir.mkdir(parents=True, exist_ok=True)
-        out = out_dir / f"{entity}_seed.csv"
-        with out.open("w", encoding="utf-8", newline="") as f:
-            wr = csv.DictWriter(f, fieldnames=list(rows[0].keys())); wr.writeheader(); wr.writerows((rows := rows[:ROWS_PER_TABLE]))
-        print(f"   {entity}: {len(rows)} rows -> {out}")
-
-    cities = [("LON","London","GB","Europe/London","GBP","2018-04-01"),("NYC","New York","US","America/New_York","USD","2017-06-15"),
-              ("BER","Berlin","DE","Europe/Berlin","EUR","2019-02-01"),("PAR","Paris","FR","Europe/Paris","EUR","2019-05-20"),
-              ("TYO","Tokyo","JP","Asia/Tokyo","JPY","2020-01-10"),("SYD","Sydney","AU","Australia/Sydney","AUD","2018-09-12"),
-              ("DXB","Dubai","AE","Asia/Dubai","AED","2021-03-01"),("SAO","Sao Paulo","BR","America/Sao_Paulo","BRL","2019-11-04")]
-    _w("city_master", [{"city_code":c,"city_name":n,"country_code":cc,"timezone":tz,"default_currency":ccy,
-        "geofence_wkt":"POLYGON((-0.5 51.3,-0.5 51.7,0.3 51.7,0.3 51.3,-0.5 51.3))","launched_at":la,"sunset_at":""}
-        for c,n,cc,tz,ccy,la in cities])
-
-    now = datetime.now(timezone.utc); fx=[]
-    for d in range(30):
-        rd=(now-timedelta(days=d)).date().isoformat()
-        for q,mid in {"USD":1.27,"EUR":1.17,"JPY":191.0,"AUD":1.93}.items():
-            drift=((d*7)%11-5)*0.001
-            fx.append({"rate_date":rd,"base_currency":"GBP","quote_currency":q,"rate":round(mid+mid*drift,4),"source_feed":"ecb_synthetic"})
-    _w("fx_rates_daily", fx)
-
-    _w("dim_country_seed", [{"country_alpha3":a3,"country_alpha2":a2,"country_name":n,"country_numeric":num,"region":rg,"sub_region":sr}
-        for a3,a2,n,num,rg,sr in [("GBR","GB","United Kingdom",826,"Europe","Northern Europe"),("USA","US","United States",840,"Americas","Northern America"),
-        ("DEU","DE","Germany",276,"Europe","Western Europe"),("FRA","FR","France",250,"Europe","Western Europe"),("JPN","JP","Japan",392,"Asia","Eastern Asia"),
-        ("AUS","AU","Australia",36,"Oceania","Australia and New Zealand"),("ARE","AE","United Arab Emirates",784,"Asia","Western Asia"),
-        ("BRA","BR","Brazil",76,"Americas","South America"),("IND","IN","India",356,"Asia","Southern Asia"),("CAN","CA","Canada",124,"Americas","Northern America")]])
-    _w("dim_currency_seed", [{"currency_code":c,"currency_numeric":num,"currency_name":n,"symbol":s,"minor_units":mu}
-        for c,num,n,s,mu in [("GBP",826,"Pound Sterling","GBP",2),("USD",840,"US Dollar","USD",2),("EUR",978,"Euro","EUR",2),("JPY",392,"Yen","JPY",0),
-        ("AUD",36,"Australian Dollar","AUD",2),("AED",784,"UAE Dirham","AED",2),("BRL",986,"Brazilian Real","BRL",2),("INR",356,"Indian Rupee","INR",2),("CAD",124,"Canadian Dollar","CAD",2)]])
-    _w("dim_payment_method_seed", [{"payment_method_code":c,"payment_method_name":n,"rail":r,"requires_strong_auth":sca,"settles_instantly":si}
-        for c,n,r,sca,si in [("card","Card (Visa/MC/Amex)","card_network","true","false"),("apple_pay","Apple Pay","card_network","true","false"),
-        ("google_pay","Google Pay","card_network","true","false"),("cash","Cash","cash","false","true"),("sepa","SEPA Direct Debit","bank","false","false"),("pix","Pix (BR)","instant_bank","true","true")]])
-    _w("dim_surge_tier_seed", [{"surge_tier_code":c,"multiplier_min":mn,"multiplier_max":mx,"display_label":l,"notify_rider":nt}
-        for c,mn,mx,l,nt in [("NONE",1.0,1.0,"No surge","false"),("LOW",1.1,1.5,"Mild surge","false"),("MED",1.5,2.5,"High demand","true"),("HIGH",2.5,4.0,"Surge pricing","true"),("PEAK",4.0,6.0,"Peak surge","true")]])
-    _w("dim_vehicle_type_seed", [{"vehicle_type_code":c,"vehicle_type_name":n,"passenger_capacity":cap,"product_tier":t,"requires_inspection":ins}
-        for c,n,cap,t,ins in [("standard","RideFlow Standard",4,"economy","false"),("comfort","RideFlow Comfort",4,"select","true"),("xl","RideFlow XL",6,"premium","true"),("black","RideFlow Black",4,"premium","true"),("eats","Eats Delivery",1,"delivery","false")]])
-    _w("dim_cancellation_reason_seed", [{"reason_code":c,"reason_label":l,"actor":a,"charge_cancellation_fee":fee,"counts_against_driver_rating":pen,"severity":sv}
-        for c,l,a,fee,pen,sv in [("rider_changed_plans","Rider changed plans","rider","true","false","low"),("rider_no_show","Rider no-show","rider","true","false","medium"),
-        ("driver_no_show","Driver no-show","driver","false","true","high"),("driver_long_eta","Driver took too long","driver","false","true","medium"),
-        ("system_unable_to_match","System unable to match","system","false","false","low"),("safety_concern","Safety concern raised","rider","false","false","high")]])
-
-    date_rows=[]; year=now.year
-    for od in range(1,366):
-        dd=datetime(year,1,1,tzinfo=timezone.utc)+timedelta(days=od-1)
-        if dd.year!=year: break
-        date_rows.append({"date_key":int(dd.strftime("%Y%m%d")),"full_date":dd.date().isoformat(),"year":dd.year,"quarter":(dd.month-1)//3+1,
-            "month":dd.month,"month_name":calendar.month_name[dd.month],"day":dd.day,"day_of_week":dd.isoweekday(),"day_name":calendar.day_name[dd.weekday()],
-            "is_weekend":"true" if dd.weekday()>=5 else "false","iso_week":dd.isocalendar()[1],"is_holiday_us":"false","is_holiday_uk":"false"})
-    _w("dim_date_seed", date_rows)
-
-
-GENERATORS = {
-    ("marketplace", "rideflow"):        gen_marketplace_rideflow,
-    ("reference",   "internal"):         gen_reference_internal,
-    ("payments",    "stripe"):          gen_payments_stripe,
-    ("operations",  "checkr"):          gen_operations_checkr,
-    ("operations",  "twilio"):          gen_operations_twilio,
-    ("operations",  "zendesk"):         gen_operations_zendesk,
-    ("marketing",   "google_ads"):       gen_marketing_google_ads,
-    ("marketing",   "google_analytics"): gen_marketing_google_analytics,
-    ("marketing",   "hubspot"):          gen_marketing_hubspot,
-    ("marketing",   "meta_ads"):         gen_marketing_meta_ads,
+_PARTITION_TOKENS = {
+    "%Y": r"(?P<Y>\d{4})",
+    "%m": r"(?P<m>\d{2})",
+    "%d": r"(?P<d>\d{2})",
+    "%H": r"(?P<H>\d{2})",
+    "%M": r"(?P<M>\d{2})",
 }
+
+
+def _partition_regex(part_fmt: str):
+    """A strftime partition format (e.g. `y_%Y/m_%m/d_%d`) as a regex."""
+    out, i = [], 0
+    while i < len(part_fmt):
+        token = part_fmt[i:i + 2]
+        if token in _PARTITION_TOKENS:
+            out.append(_PARTITION_TOKENS[token])
+            i += 2
+        else:
+            out.append(re.escape(part_fmt[i]))
+            i += 1
+    return re.compile("^" + "".join(out) + "$")
+
+
+def window_minutes_of(part_fmt: str) -> Optional[int]:
+    """Window size in minutes from the partition format's finest unit, or None."""
+    if not part_fmt:
+        return None
+    if "%M" in part_fmt:
+        return 1
+    if "%H" in part_fmt:
+        return 60
+    if "%d" in part_fmt:
+        return 1440
+    return None
+
+
+def latest_partition(base: str, part_fmt: str) -> Optional[datetime]:
+    """Time of the newest non-empty partition under `base`, or None."""
+    part_fmt = (part_fmt or "").strip("/")
+    if not part_fmt or not os.path.isdir(base):
+        return None
+    regex = _partition_regex(part_fmt)
+    depth = part_fmt.count("/") + 1
+    latest = None
+    for dirpath, _dirs, files in os.walk(base):
+        rel = os.path.relpath(dirpath, base).replace("\\", "/")
+        if rel == "." or rel.count("/") + 1 != depth:
+            continue
+        if not any(not f.startswith((".", "_")) for f in files):
+            continue  # empty partition: not landed
+        match = regex.match(rel)
+        if not match:
+            continue
+        g = match.groupdict()
+        ts = datetime(
+            int(g.get("Y") or 1970), int(g.get("m") or 1), int(g.get("d") or 1),
+            int(g.get("H") or 0), int(g.get("M") or 0), tzinfo=timezone.utc,
+        )
+        if latest is None or ts > latest:
+            latest = ts
+    return latest
+
+
+def _single_line_text(df):
+    """Replace line breaks in text columns with ", " before writing CSV.
+
+    Faker addresses contain a newline (street, then city). A CSV reader without `multiLine`
+    splits that record in two, shifting every later column (dates in city_code).
+    """
+    import polars as pl
+
+    text = [c for c, t in df.schema.items() if t == pl.Utf8]
+    if not text:
+        return df
+    return df.with_columns(
+        pl.col(c).str.replace_all(r"\r\n|\r|\n", ", ") for c in text
+    )
+
+
+def _existing_values(base: str, fmt: str, column: str, multiline: bool) -> List[str]:
+    """Sorted values of `column` already landed under `base`."""
+    import polars as pl
+
+    if not os.path.isdir(base):
+        return []
+    values = set()
+    if os.path.isdir(os.path.join(base, "_delta_log")):
+        try:
+            values.update(str(v) for v in pl.read_delta(base, columns=[column])[column].drop_nulls().to_list())
+        except Exception:  # noqa: BLE001 - unreadable: no keys
+            pass
+        return sorted(values)
+    for dirpath, _dirs, files in os.walk(base):
+        for name in files:
+            if name.startswith((".", "_")):
+                continue
+            path = os.path.join(dirpath, name)
+            try:
+                if name.endswith(".csv"):
+                    frame = pl.read_csv(path, columns=[column], infer_schema_length=0)
+                elif name.endswith(".parquet"):
+                    frame = pl.read_parquet(path, columns=[column])
+                elif name.endswith(".json"):
+                    frame = pl.read_json(path) if multiline else pl.read_ndjson(path)
+                else:
+                    continue
+                if column in frame.columns:
+                    values.update(str(v) for v in frame[column].drop_nulls().to_list())
+            except Exception:  # noqa: BLE001
+                continue
+    return sorted(values)
+
+
+def _floor(ts: datetime, minutes: int) -> datetime:
+    step = minutes * 60
+    return datetime.fromtimestamp((int(ts.timestamp()) // step) * step, tz=timezone.utc)
+
+
+def _window_seed(seed: int, window_start: datetime) -> int:
+    return int(hashlib.sha256(f"{seed}:{window_start.isoformat()}".encode()).hexdigest()[:8], 16)
+
+
+def extend_bronze_estate(
+    registry_path: str,
+    out_root: str,
+    *,
+    environment: str = "dev",
+    storage_mode: str = "catalog",
+    rows: int = 200,
+    rows_by_entity: Optional[Dict[str, int]] = None,
+    entities: Optional[List[str]] = None,
+    seed: int = 7,
+    invalid_ratio: float = 0.0,
+    duplicate_ratio: float = 0.0,
+    batches: int = 1,
+    #: Windows of history for an empty landing zone.
+    windows_on_empty: int = 24,
+    #: History in minutes (1440 = 24 hours). Overrides `windows_on_empty`; also caps a stale zone.
+    history_minutes: Optional[int] = None,
+    #: Max windows written per run.
+    max_windows: int = 48,
+    #: Share of `rows` added to parent tables per window, once they have rows.
+    new_parent_ratio: float = 0.1,
+    fmt: str = "delta",
+    generative: bool = False,
+    ai_provider: Optional[str] = None,
+    ai_model: Optional[str] = None,
+    now: Optional[datetime] = None,
+) -> List[Dict[str, Any]]:
+    """Add the missing time windows to a synthetic landing zone, up to now.
+
+    - Only complete windows are written; a re-run in the same window adds nothing.
+    - Unpartitioned full-load contracts are written once.
+    - Returns one report row per entity per window (same shape as `seed_bronze_estate`).
+    """
+    from lakelogic.core.registry import DomainRegistry as _Reg
+    import polars as pl
+
+    registry = _Reg.from_yaml(registry_path, environment=environment, storage_mode=storage_mode)
+    landing_root = str(getattr(getattr(registry, "storage", None), "landing_root", "") or "")
+    bronze = [c for c in registry.contracts if reads_landing(c.layer, c.contract_dict)]
+    if not bronze:
+        raise RuntimeError(f"No bronze contracts in {registry_path} - nothing to extend.")
+
+    # Each entity's landing path (without partition) and partition format.
+    info: Dict[str, Dict[str, Any]] = {}
+    for c in bronze:
+        doc = c.contract_dict or {}
+        layout = landing_layout(doc, landing_root=landing_root, out_root=out_root, entity=c.entity, at=None)
+        path, partition = layout["path"], layout.get("partition")
+        base = path[: -(len(partition) + 1)] if partition and path.endswith("/" + partition) else path
+        part_fmt = str(((doc.get("source") or {}).get("partition") or {}).get("format") or "").strip()
+        info[c.entity] = {
+            "doc": doc, "base": base, "part_fmt": part_fmt,
+            "fmt": (layout.get("format") or fmt or "delta").strip().lower(),
+            "multiline": layout.get("multiline", True),
+            "dedup": dedup_keys_declared(doc),
+            # Unpartitioned full load: write once, or keys duplicate.
+            "static": not part_fmt and str((doc.get("source") or {}).get("load_mode") or "").lower() == "full",
+        }
+    landed_static = {
+        e for e, v in info.items()
+        if v["static"] and os.path.isdir(v["base"])
+        and any(files for _d, _s, files in os.walk(v["base"]))
+    }
+
+    # Window size: the finest partition any entity declares.
+    granularities = [m for m in (window_minutes_of(v["part_fmt"]) for v in info.values()) if m]
+    window = min(granularities) if granularities else 60
+    delta = timedelta(minutes=window)
+    now = now or datetime.now(timezone.utc)
+    limit = _floor(now, window)  # complete windows only
+
+    finest = [e for e, v in info.items() if window_minutes_of(v["part_fmt"]) == window]
+    landed = [t for t in (latest_partition(info[e]["base"], info[e]["part_fmt"]) for e in finest) if t]
+    history_windows = max(1, int(windows_on_empty))
+    if history_minutes:
+        history_windows = max(1, -(-int(history_minutes) // window))  # ceil
+    history_start = limit - delta * history_windows
+    if landed:
+        cursor = max(landed) + delta
+        if cursor < history_start:
+            # Stale zone: restart at the history start instead of replaying the gap.
+            print(f"[synthetic_seed] latest landed window {max(landed).isoformat()} is older than the "
+                  f"{history_windows}-window history; resuming at {history_start.isoformat()}")
+            cursor = history_start
+        else:
+            print(f"[synthetic_seed] extending from {cursor.isoformat()} (latest window already landed)")
+    else:
+        cursor = history_start
+        print(f"[synthetic_seed] empty landing zone: writing {history_windows} window(s) of history")
+
+    missing: List[Dict[str, str]] = []
+    relationships = seed_relationships(registry, unresolved=missing)
+    # Parent values from other systems, read once.
+    foreign = foreign_key_pools(registry_path, out_root, missing, landing_root=landing_root,
+                                environment=environment, storage_mode=storage_mode)
+    parent_keys = sorted({(r["parent"], r["parent_column"]) for r in relationships})
+    pools: Dict[Tuple[str, str], List[str]] = {
+        (p, col): _existing_values(info[p]["base"], info[p]["fmt"], col, info[p]["multiline"])
+        for p, col in parent_keys if p in info
+    }
+    wanted = {str(e).strip().lower() for e in (entities or []) if str(e).strip()}
+
+    report: List[Dict[str, Any]] = []
+    written_windows = 0
+    while cursor + delta <= limit and written_windows < max(1, int(max_windows)):
+        w_seed = _window_seed(seed, cursor)
+        rng = random.Random(w_seed)
+        frames = generate_bronze_frames(
+            registry_path, environment=environment, storage_mode=storage_mode,
+            rows=rows, rows_by_entity=rows_by_entity, seed=w_seed, invalid_ratio=invalid_ratio,
+            window_start=cursor.replace(tzinfo=None), window_end=(cursor + delta).replace(tzinfo=None),
+            generative=generative, ai_provider=ai_provider, ai_model=ai_model,
+        )
+
+        # Parents: drop keys already landed, keep a small share.
+        for parent, col in parent_keys:
+            df = frames.get(parent)
+            if df is None or col not in df.columns:
+                continue
+            existing = set(pools.get((parent, col), []))
+            if existing:
+                df = df.filter(~pl.col(col).cast(pl.Utf8).is_in(list(existing)))
+                keep = max(1, round((rows_by_entity or {}).get(parent, rows) * float(new_parent_ratio)))
+                df = df.head(keep)
+            frames[parent] = df
+
+        # Children: point FKs at parents landed before or in this window.
+        for rel in relationships:
+            child, parent, col = rel["child"], rel["parent"], rel["child_column"]
+            df = frames.get(child)
+            if df is None or col not in df.columns:
+                continue
+            landing_now = []
+            if not wanted or parent.lower() in wanted:
+                pframe = frames.get(parent)
+                if pframe is not None and rel["parent_column"] in pframe.columns:
+                    landing_now = [str(v) for v in pframe[rel["parent_column"]].drop_nulls().to_list()]
+            pool = pools.get((parent, rel["parent_column"]), []) + landing_now
+            if pool:
+                values = [pool[rng.randrange(len(pool))] for _ in range(df.height)]
+                frames[child] = df.with_columns(pl.Series(col, values).cast(df.schema[col], strict=False))
+        frames = _apply_foreign_pools(frames, foreign, w_seed)
+
+        for entity, df in frames.items():
+            if wanted and entity.lower() not in wanted:
+                continue
+            meta = info.get(entity)
+            if meta is None:
+                continue
+            if meta["static"]:
+                if entity in landed_static:
+                    continue
+                landed_static.add(entity)
+            if duplicate_ratio > 0 and meta["dedup"]:
+                df = inject_duplicates(df, duplicate_ratio, w_seed)
+            layout = landing_layout(
+                meta["doc"], landing_root=landing_root, out_root=out_root, entity=entity, at=cursor,
+            )
+            dest = layout.get("path") or f"{out_root.rstrip('/')}/{entity}"
+            entity_fmt = meta["fmt"] if meta["fmt"] in ("delta", "parquet", "csv", "json") else "csv"
+            written = _write_entity(
+                df, dest, entity, entity_fmt, layout,
+                batches=batches, seed=w_seed, write_mode="append",
+            )
+            report.append({
+                "entity": entity, "rows": df.height, "path": dest, "format": entity_fmt,
+                "partition": layout.get("partition"), "declared": True,
+                "batches": len(written), "window_start": cursor.isoformat(),
+            })
+            for p, col in parent_keys:
+                if p == entity and col in df.columns:
+                    pools.setdefault((p, col), []).extend(str(v) for v in df[col].drop_nulls().to_list())
+
+        cursor += delta
+        written_windows += 1
+
+    if written_windows == 0:
+        print("[synthetic_seed] already caught up - no complete window to add.")
+    elif cursor + delta <= limit:
+        print(f"[synthetic_seed] wrote {written_windows} window(s); more remain - run again to catch up.")
+    else:
+        print(f"[synthetic_seed] wrote {written_windows} window(s); caught up to {limit.isoformat()}.")
+    return report
+
+
+def seed_bronze_estate(
+    registry_path: str,
+    out_root: str,
+    *,
+    environment: str = "dev",
+    storage_mode: str = "catalog",
+    rows: int = 200,
+    seed: int = 7,
+    invalid_ratio: float = 0.0,
+    #: Share of rows duplicated, only for contracts with `deduplicate`.
+    duplicate_ratio: float = 0.0,
+    window_start: Optional[datetime] = None,
+    window_end: Optional[datetime] = None,
+    fmt: str = "delta",
+    write_mode: str = "overwrite",
+    #: `batch_NN_*` files per partition.
+    batches: int = 1,
+    generative: bool = False,
+    ai_provider: Optional[str] = None,
+    ai_model: Optional[str] = None,
+    #: Write only these entities. Parents are still generated for their ids, not written.
+    entities: Optional[List[str]] = None,
+    rows_by_entity: Optional[Dict[str, int]] = None,
+) -> List[Dict[str, Any]]:
+    """Generate synthetic data and write each entity to its landing zone under `out_root`.
+
+    - Path, format and partition come from each contract (`landing_layout`); `fmt` is used
+      only when a contract declares no format.
+    - Also writes synthetic documents for extraction contracts, and applies cross-system FKs.
+    - Returns one report row per entity: entity, rows, path, format, partition, batches.
+    """
+    fmt = (fmt or "delta").strip().lower()
+    if fmt not in ("delta", "parquet", "csv"):
+        raise ValueError(f"fmt must be 'delta', 'parquet' or 'csv', got {fmt!r}")
+
+    frames = generate_bronze_frames(
+        registry_path, environment=environment, storage_mode=storage_mode, rows=rows, seed=seed,
+        rows_by_entity=rows_by_entity,
+        invalid_ratio=invalid_ratio, window_start=window_start, window_end=window_end,
+        generative=generative, ai_provider=ai_provider, ai_model=ai_model,
+    )
+    # Landing layout per contract.
+    layouts: Dict[str, Dict[str, Any]] = {}
+    dedup_targets: Dict[str, List[str]] = {}
+    try:
+        from lakelogic.core.registry import DomainRegistry as _Reg
+
+        _r = _Reg.from_yaml(registry_path, environment=environment, storage_mode=storage_mode)
+        _root = str(getattr(getattr(_r, "storage", None), "landing_root", "") or "")
+        for _c in getattr(_r, "contracts", []) or []:
+            if not reads_landing(getattr(_c, "layer", None), getattr(_c, "contract_dict", None)):
+                continue
+            _doc = getattr(_c, "contract_dict", None) or {}
+            layouts[_c.entity] = landing_layout(
+                _doc, landing_root=_root, out_root=out_root, entity=_c.entity, at=window_end,
+            )
+            # Dedup keys, if declared.
+            dedup_targets[_c.entity] = dedup_keys_declared(_doc)
+    except Exception as exc:  # noqa: BLE001 - fall back, keep seeding
+        print(f"[synthetic_seed] could not read declared landing layout ({exc}); "
+              "falling back to <out_root>/<entity>")
+
+    try:
+        _missing: List[Dict[str, str]] = []
+        seed_relationships(_r, unresolved=_missing)
+        frames = _apply_foreign_pools(frames, foreign_key_pools(
+            registry_path, out_root, _missing, landing_root=_root,
+            environment=environment, storage_mode=storage_mode,
+        ), seed)
+    except Exception as exc:  # noqa: BLE001 - best effort
+        print(f"[synthetic_seed] cross-system keys not applied ({exc})")
+
+    wanted = {str(e).strip().lower() for e in (entities or []) if str(e).strip()}
+    unknown = sorted(wanted - {e.lower() for e in frames})
+    if unknown:
+        print(f"[synthetic_seed] entities not in this system, ignored: {unknown}")
+    report: List[Dict[str, Any]] = []
+    # Documents for extraction contracts (LLM extraction is skipped).
+    report.extend(_write_documents(
+        registry_path, out_root, environment=environment, storage_mode=storage_mode,
+        rows=rows, rows_by_entity=rows_by_entity, seed=seed, invalid_ratio=invalid_ratio, wanted=wanted,
+    ))
+    for entity, df in frames.items():
+        if wanted and entity.lower() not in wanted:
+            continue
+        if duplicate_ratio > 0 and dedup_targets.get(entity):
+            before = df.height
+            df = inject_duplicates(df, duplicate_ratio, seed)
+            if df.height != before:
+                print(f"[synthetic_seed] {entity}: +{df.height - before} duplicate row(s) "
+                      f"for the declared dedup keys {dedup_targets[entity]}")
+        layout = layouts.get(entity) or {}
+        dest = layout.get("path") or f"{out_root.rstrip('/')}/{entity}"
+        # Per-contract format.
+        entity_fmt = (layout.get("format") or fmt or "delta").strip().lower()
+        if entity_fmt not in ("delta", "parquet", "csv", "json"):
+            print(f"[synthetic_seed] {entity}: unsupported declared format {entity_fmt!r}; using csv")
+            entity_fmt = "csv"
+
+        written = _write_entity(
+            df, dest, entity, entity_fmt, layout,
+            batches=batches, seed=seed, write_mode=write_mode,
+        )
+
+        report.append({
+            "entity": entity, "rows": df.height, "path": dest, "format": entity_fmt,
+            # True if the layout came from the contract.
+            "partition": layout.get("partition"),
+            "declared": bool(layout),
+            "batches": len(written),
+        })
+    return report
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    """CLI entry point. Args come from flags or `SYNTH_*` env vars."""
+    p = argparse.ArgumentParser(description="Write a synthetic bronze estate to the lake.")
+    p.add_argument("--registry", default=os.getenv("SYNTH_REGISTRY_PATH"),
+                   help="Path to the system's _system.yaml registry.")
+    p.add_argument("--out-root", default=os.getenv("SYNTH_OUT_ROOT"),
+                   help="Lake root the synthetic bronze tables are written under.")
+    p.add_argument("--rows", type=int, default=int(os.getenv("SYNTH_ROWS", "200")))
+    p.add_argument("--seed", type=int, default=int(os.getenv("SYNTH_SEED", "7")))
+    p.add_argument("--invalid-ratio", type=float, default=float(os.getenv("SYNTH_INVALID_RATIO", "0.0")))
+    p.add_argument("--environment", default=os.getenv("SYNTH_ENVIRONMENT", "dev"))
+    p.add_argument("--fmt", default=os.getenv("SYNTH_FORMAT", "delta"), choices=["delta", "parquet", "csv"])
+    p.add_argument("--generative", action="store_true",
+                   default=os.getenv("SYNTH_GENERATIVE", "").strip().lower() in ("1", "true", "yes"),
+                   help="Enable AI-enriched realistic values (needs an LLM key in this env).")
+    p.add_argument("--ai-provider", default=os.getenv("SYNTH_AI_PROVIDER") or os.getenv("LAKELOGIC_AI_PROVIDER"))
+    p.add_argument("--ai-model", default=os.getenv("SYNTH_AI_MODEL") or os.getenv("LAKELOGIC_AI_MODEL"))
+    args = p.parse_args(argv)
+
+    if not args.registry or not args.out_root:
+        p.error("--registry and --out-root (or SYNTH_REGISTRY_PATH / SYNTH_OUT_ROOT) are required")
+
+    report = seed_bronze_estate(
+        args.registry, args.out_root,
+        environment=args.environment, rows=args.rows, seed=args.seed,
+        invalid_ratio=args.invalid_ratio, fmt=args.fmt,
+        generative=args.generative, ai_provider=args.ai_provider, ai_model=args.ai_model,
+    )
+    total = sum(r["rows"] for r in report)
+    for r in report:
+        print(f"  {r['entity']}: {r['rows']} rows -> {r['path']} ({r['format']})")
+    print(f"Synthetic bronze estate: {len(report)} table(s), {total} rows.")
+    return 0
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 3. Parameters
+# MAGIC
+# MAGIC Widgets arrive as strings; a job run overrides them per run. One widget per line.
+
+# COMMAND ----------
+
+# DBTITLE 1,Parameters
+# Parameters — the pipeline overrides these per (domain, system). Values arrive as strings.
+# Declare the parameters (the job passes values for these).
+dbutils.widgets.text("catalog", "", "catalog")     # the Unity Catalog this run reads and writes
+dbutils.widgets.text("contracts_root", "", "contracts_root")
+dbutils.widgets.text("domain", "lakehouse", "domain")
+dbutils.widgets.text("system", "lakehouse", "system")
+dbutils.widgets.text("environment", "dev", "environment")                    # a key of _system.yaml environments
+dbutils.widgets.text("rows_per_table", "100", "rows_per_table")               # synthetic rows per bronze entity, per window
+dbutils.widgets.text("entities", "", "entities")                             # comma-separated bronze entities to write; blank => all
+dbutils.widgets.text("rows_per_entity", "", "rows_per_entity")               # JSON, e.g. {"charges": 5000}; overrides rows_per_table
+dbutils.widgets.text("mode", "extend", "mode")                               # seed = one window | extend = add the windows the landing zone is missing, up to now
+dbutils.widgets.text("windows_on_empty", "48", "windows_on_empty")           # extend: history an EMPTY landing zone gets on its first run (2 days, hourly)
+dbutils.widgets.text("history_minutes", "2880", "history_minutes")           # extend: history as a duration (2 days); overrides windows_on_empty
+dbutils.widgets.text("max_windows", "96", "max_windows")                     # extend: most windows one run writes; MUST exceed the history above
+dbutils.widgets.text("new_parent_ratio", "0.1", "new_parent_ratio")          # extend: parent tables grow by this share of rows per window
+dbutils.widgets.text("loop_interval_minutes", "0", "loop_interval_minutes")  # extend: 0 = catch up and stop (for a schedule); N = repeat every N minutes
+dbutils.widgets.text("max_run_minutes", "60", "max_run_minutes")             # extend: stop looping after this long
+dbutils.widgets.text("batches", "10", "batches")                             # batch files per partition (a landing zone holds several)
+dbutils.widgets.text("seed", "7", "seed")                                    # deterministic — same seed => same estate
+dbutils.widgets.text("invalid_ratio", "0.1", "invalid_ratio")                # inject bad rows (0..1) to exercise quality gates
+dbutils.widgets.text("duplicate_ratio", "0.05", "duplicate_ratio")           # re-append this fraction as duplicates, for contracts that declare dedup
+dbutils.widgets.text("synthetic_schema", "", "synthetic_schema")             # target lakehouse schema; blank => synthetic_<domain>
+dbutils.widgets.text("generative", "false", "generative")                    # true => AI-enriched realistic values (needs an LLM key in THIS runtime env)
+dbutils.widgets.text("landing_runtime", "", "landing_runtime")  # where landing files come from (Deliver data-source step); blank = the registry's own path
+
+# Read them.
+catalog = dbutils.widgets.get("catalog")
+contracts_root = dbutils.widgets.get("contracts_root")
+domain = dbutils.widgets.get("domain")
+system = dbutils.widgets.get("system")
+environment = dbutils.widgets.get("environment")
+rows_per_table = dbutils.widgets.get("rows_per_table")
+entities = dbutils.widgets.get("entities")
+rows_per_entity = dbutils.widgets.get("rows_per_entity")
+mode = dbutils.widgets.get("mode")
+windows_on_empty = dbutils.widgets.get("windows_on_empty")
+history_minutes = dbutils.widgets.get("history_minutes")
+max_windows = dbutils.widgets.get("max_windows")
+new_parent_ratio = dbutils.widgets.get("new_parent_ratio")
+loop_interval_minutes = dbutils.widgets.get("loop_interval_minutes")
+max_run_minutes = dbutils.widgets.get("max_run_minutes")
+batches = dbutils.widgets.get("batches")
+seed = dbutils.widgets.get("seed")
+invalid_ratio = dbutils.widgets.get("invalid_ratio")
+duplicate_ratio = dbutils.widgets.get("duplicate_ratio")
+synthetic_schema = dbutils.widgets.get("synthetic_schema")
+generative = dbutils.widgets.get("generative")
+landing_runtime = dbutils.widgets.get("landing_runtime")
+
+                                       # extend is the default so a FIRST load lands real history, not one window
+
+# COMMAND ----------
+
+# DBTITLE 1,Landing source library
+"""Where a delivered notebook reads its landing files from — run inside the delivered project.
+
+This module imports only the standard library, and its source is pasted into the generated Databricks and Fabric notebooks in place of
+their landing-runtime placeholder, so the pipeline it runs and the function tested here are the
+same code. The Deliver data-source step (:mod:`deployment_target_data_source`) renders the
+``landing_runtime`` spec it consumes:
+
+* ``env``     ENV_NAME → the value of a per-environment parameter (already interpolated by the
+  platform: a bundle variable on Databricks, a pipeline parameter on Fabric);
+* ``secrets`` ENV_NAME → [scope, key] NAMES, read here through the platform's secret reader;
+* ``auth``    for a direct connection, the service principal, each part a literal or ``$ENV_NAME``.
+
+It fills ``os.environ`` before ``DomainRegistry.from_yaml`` (which resolves the ``ls_*`` keys
+from it) and sets account-scoped Azure OAuth for a direct connection. The client secret is held
+only in the Spark config: it is never exported to the environment and never printed.
+"""
+import json as _lr_json
+import os as _lr_os
+
+
+class LandingRuntimeError(RuntimeError):
+    """The landing source cannot be set up; the message names the variable to set."""
+
+
+def apply_landing_runtime(spec, get_secret, set_conf, environ=None):
+    """Apply ``spec`` (a dict or its JSON) and return what was set, by NAME only.
+
+    ``get_secret(scope, key)`` reads a secret (``dbutils.secrets.get`` on Databricks,
+    ``notebookutils.credentials.getSecret`` on Fabric); ``set_conf(key, value)`` sets a Spark
+    config (``spark.conf.set``)."""
+    environ = _lr_os.environ if environ is None else environ
+    if isinstance(spec, str):
+        spec = _lr_json.loads(spec) if spec.strip() else {}
+    spec = spec or {}
+    auth = spec.get("auth") or None
+    # The secret behind the client secret authenticates only: keep it out of the environment.
+    private = {auth["client_secret"][1:]} if auth and str(auth.get("client_secret", "")).startswith("$") else set()
+    values = {}
+    for name, value in (spec.get("env") or {}).items():
+        value = "" if value is None else str(value)
+        if not value.strip() or value.startswith("${"):
+            raise LandingRuntimeError(
+                f"Landing parameter {name.lower()} has no value for this environment. "
+                f"Set it on the deployment target (bundle variable / pipeline parameter) and re-run."
+            )
+        values[name] = value.strip()
+    for name, ref in (spec.get("secrets") or {}).items():
+        scope, key = (list(ref) + ["", ""])[:2]
+        if not str(scope).strip() or not str(key).strip() or str(scope).startswith("${"):
+            raise LandingRuntimeError(
+                f"Secret for {name.lower()} has no scope or key name for this environment. "
+                f"Set {name.lower()}_scope and {name.lower()}_key and re-run."
+            )
+        try:
+            values[name] = get_secret(str(scope).strip(), str(key).strip())
+        except Exception as exc:  # the platform's message names the scope; never the value
+            raise LandingRuntimeError(
+                f"Could not read secret {key!r} from {scope!r} for {name.lower()}: {type(exc).__name__}"
+            ) from None
+    for name, value in values.items():
+        if name not in private:
+            environ[name] = value
+
+    configured = None
+    if auth and auth.get("type") == "azure_service_principal":
+        def _v(part):
+            raw = str(auth.get(part) or "")
+            return values.get(raw[1:], environ.get(raw[1:], "")) if raw.startswith("$") else raw
+
+        account, tenant, client, secret = (_v("storage_account"), _v("tenant_id"),
+                                           _v("client_id"), _v("client_secret"))
+        missing = [p for p, v in (("storage_account", account), ("tenant_id", tenant),
+                                  ("client_id", client), ("client_secret", secret)) if not v]
+        if missing:
+            raise LandingRuntimeError(f"Direct connection is missing {', '.join(missing)}.")
+        host = f"{account}.dfs.core.windows.net"
+        set_conf(f"fs.azure.account.auth.type.{host}", "OAuth")
+        set_conf(f"fs.azure.account.oauth.provider.type.{host}",
+                 "org.apache.hadoop.fs.azurebfs.oauth2.ClientCredsTokenProvider")
+        set_conf(f"fs.azure.account.oauth2.client.id.{host}", client)
+        set_conf(f"fs.azure.account.oauth2.client.secret.{host}", secret)
+        set_conf(f"fs.azure.account.oauth2.client.endpoint.{host}",
+                 f"https://login.microsoftonline.com/{tenant}/oauth2/token")
+        configured = host
+    return {"environment": sorted(n for n in values if n not in private),
+            "secrets": sorted((spec.get("secrets") or {}).keys()),
+            "direct_connection": configured}
+
+
+_FABRIC_API = "https://api.fabric.microsoft.com/v1"
+
+
+def ensure_onelake_shortcut(spec, get_token, workspace_id, lakehouse_id, request, environ=None):
+    """Create the OneLake shortcut ``Files/<name>`` → ADLS that a Fabric ``shortcut`` data
+    source reads through, once. Run by setup after :func:`apply_landing_runtime`.
+
+    An existing shortcut with the same target is left alone; one pointing anywhere else stops
+    setup rather than read the wrong storage. ``request(method, url, headers, body)`` returns
+    ``(status, json_or_None)``; ``get_token()`` returns a Fabric API bearer token. The
+    connection's credentials stay in Fabric: only its ID is sent."""
+    environ = _lr_os.environ if environ is None else environ
+    if isinstance(spec, str):
+        spec = _lr_json.loads(spec) if spec.strip() else {}
+    sc = (spec or {}).get("shortcut")
+    if not sc:
+        return None
+
+    def _v(part):
+        raw = str(sc.get(part) or "")
+        return environ.get(raw[1:], "") if raw.startswith("$") else raw
+
+    name, account, container = _v("shortcut_name"), _v("storage_account"), _v("container")
+    folder, connection = _v("folder").strip("/"), _v("connection_id")
+    missing = [p for p, v in (("shortcut_name", name), ("storage_account", account),
+                              ("container", container), ("connection_id", connection)) if not v]
+    if missing:
+        raise LandingRuntimeError(f"OneLake shortcut is missing {', '.join(missing)}.")
+    location = f"https://{account}.dfs.core.windows.net"
+    subpath = "/" + "/".join(p for p in (container, folder) if p)
+    base = f"{_FABRIC_API}/workspaces/{workspace_id}/items/{lakehouse_id}/shortcuts"
+    headers = {"Authorization": f"Bearer {get_token()}", "Content-Type": "application/json"}
+
+    status, body = request("GET", f"{base}/Files/{name}", headers, None)
+    if status == 200:
+        target = ((body or {}).get("target") or {}).get("adlsGen2") or {}
+        same = (str(target.get("location", "")).rstrip("/").lower() == location.lower()
+                and str(target.get("subpath", "")).rstrip("/") == subpath)
+        if not same:
+            raise LandingRuntimeError(
+                f"Files/{name} already exists and points at {target.get('location')}{target.get('subpath')}, "
+                f"not {location}{subpath}. Rename the shortcut or remove the old one."
+            )
+        return {"shortcut": f"Files/{name}", "target": location + subpath, "created": False}
+    if status != 404:
+        raise LandingRuntimeError(f"Could not read shortcut Files/{name}: HTTP {status}.")
+    payload = {"path": "Files", "name": name,
+               "target": {"adlsGen2": {"location": location, "subpath": subpath, "connectionId": connection}}}
+    status, body = request("POST", base, headers, payload)
+    if status not in (200, 201):
+        detail = (body or {}).get("message") or (body or {}).get("errorCode") or ""
+        raise LandingRuntimeError(f"Creating shortcut Files/{name} failed: HTTP {status} {detail}".rstrip())
+    return {"shortcut": f"Files/{name}", "target": location + subpath, "created": True}
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## 🚀 Dispatch
-# MAGIC - **single** → generate just this system (called by each orchestrator's test_data task)
-# MAGIC - **all** → FK-consistent seed of every domain in dependency order
+# MAGIC ## 4. Write the bronze estate
+# MAGIC
+# MAGIC Fails the task on any error and leaves the traceback in <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">lakelogic_logs/</span>.
 
 # COMMAND ----------
 
-def _run_bronze_silver(reg):
-    """Run bronze+silver inline (spark on UC) so downstream waves find real ids."""
-    try:
-        from lakelogic.pipeline.runner import LakehousePipeline
-    except ImportError:
-        from lakelogic.pipeline import LakehousePipeline
-    _engine = "spark" if mode == "uc" else "polars"
-    _kw = {"registry": reg, "engine": _engine}
-    if mode == "uc":
-        _kw["spark"] = spark  # noqa: F821  (Databricks global)
-    LakehousePipeline(**_kw).run(target_layers="bronze,silver")
+# DBTITLE 1,Write synthetic bronze
+import os, traceback
+# Convert string parameters to numbers and booleans.
+ROWS = max(1, int(str(rows_per_table).strip() or "100"))
+import json as _json
+ENTITIES = [e.strip() for e in str(entities).split(",") if e.strip()]
+_rpe = str(rows_per_entity).strip()
+ROWS_BY_ENTITY = {str(k): max(1, int(v)) for k, v in _json.loads(_rpe).items()} if _rpe else None
+MODE = str(mode).strip().lower() or "seed"
+WINDOWS_ON_EMPTY = max(1, int(str(windows_on_empty).strip() or "48"))
+HISTORY_MINUTES = int(str(history_minutes).strip() or "0") or None
+MAX_WINDOWS = max(1, int(str(max_windows).strip() or "96"))
+NEW_PARENT_RATIO = float(str(new_parent_ratio).strip() or "0.1")
+BATCHES = max(1, int(str(batches).strip() or "10"))
+SEED = int(str(seed).strip() or "7")
+INVALID_RATIO = float(str(invalid_ratio).strip() or "0.1")
+DUPLICATE_RATIO = float(str(duplicate_ratio).strip() or "0.05")
+GENERATIVE = str(generative).strip().lower() in ("1", "true", "yes")
+SCHEMA = str(synthetic_schema).strip() or f"synthetic_{domain}"
 
+os.environ[f"DATABRICKS_{environment.upper()}_CATALOG"] = catalog
 
-if SEED_MODE != "all":
-    # ── single-system generation ─────────────────────────────────────────────
-    _gen = GENERATORS.get((DOMAIN, SYSTEM))
-    if _gen is None:
-        print(f"⏩ No generator registered for {DOMAIN}/{SYSTEM} — nothing to generate.")
+# Where landing files come from (the Deliver data-source step): parameters, secret NAMES and,
+# for a direct connection, the service principal's Spark config. Blank = the registry's own path.
+_landing_source = apply_landing_runtime(landing_runtime, dbutils.secrets.get, spark.conf.set)
+if str(landing_runtime).strip():
+    print(f"Landing source: {_landing_source}")
+REGISTRY_PATH = f"{contracts_root}/{domain}/{system}/_system.yaml"
+# Write files into the landing zone for bronze to read (Delta can't be written through the
+# driver's file mount). The landing root comes from the contracts' own registry.
+from lakelogic.core.registry import DomainRegistry as _DomainRegistry
+_registry = _DomainRegistry.from_yaml(
+    path=REGISTRY_PATH, environment=environment, storage_mode="uc",
+)
+_landing = _registry.storage.landing_root
+# Path, format and partitioning are read from each contract.
+# Unity Catalog landing roots are absolute Volume paths. A relative one would mean
+# the registry was written for a different host, so fail rather than guess a prefix.
+OUT_ROOT = str(_landing)
+if not OUT_ROOT.startswith("/"):
+    raise RuntimeError(
+        f"Synthetic data is written to a Volume only, and this system reads landing files from "
+        f"{OUT_ROOT}. Seeding never writes into remote source storage."
+    )
+print(f"Registry : {REGISTRY_PATH}")
+print(f"Landing  -> {OUT_ROOT}  (rows={ROWS}, seed={SEED}, batches={BATCHES}, generative={GENERATIVE})")
+
+def _extend_report():
+    # Catch up to now. If loop_interval_minutes > 0, repeat until max_run_minutes.
+    import time as _time
+    _interval = max(0, int(str(loop_interval_minutes).strip() or "0"))
+    _deadline = _time.time() + max(1, int(str(max_run_minutes).strip() or "60")) * 60
+    _all = []
+    while True:
+        _all.extend(extend_bronze_estate(
+            REGISTRY_PATH, OUT_ROOT, environment=environment, rows=ROWS,
+            rows_by_entity=ROWS_BY_ENTITY, entities=ENTITIES or None, seed=SEED,
+            invalid_ratio=INVALID_RATIO, duplicate_ratio=DUPLICATE_RATIO, batches=BATCHES,
+            windows_on_empty=WINDOWS_ON_EMPTY, history_minutes=HISTORY_MINUTES, max_windows=MAX_WINDOWS,
+            new_parent_ratio=NEW_PARENT_RATIO, generative=GENERATIVE,
+        ))
+        if _interval <= 0 or _time.time() + _interval * 60 > _deadline:
+            break
+        _time.sleep(_interval * 60)
+    return _all
+
+try:
+    if MODE == "extend":
+        report = _extend_report()
     else:
-        print(f"⚙️  Generating {DOMAIN}/{SYSTEM} with {_gen.__name__} → {LANDING_URI}")
-        _gen(registry, LANDING_URI)
-        print(f"✅ Landing data written for {DOMAIN}/{SYSTEM}")
-    # Seed orchestration (pl_test_synthetic_seed) builds bronze+silver per system so a
-    # DOWNSTREAM seed reads real ids from this system's silver (FK-consistent data).
-    if dbutils.widgets.get("build_bronze_silver").lower() == "true":
-        print("🏗  bronze + silver …")
-        _run_bronze_silver(registry)
-else:
-    # ── all-domains, FK-ordered seed (mirrors RA test_data_driver_all) ────────
-    import glob as _glob, re as _re, yaml as _yaml
-    from collections import defaultdict as _dd, deque as _deque
-
-    # 1) Discover every system from the staged contract registry
-    _contracts_root = f"/Volumes/{CATALOG}/nondelta/_contracts" if mode == "uc" else str(Path(SYSTEM_YAML).parents[3])
-    SKIP = {"shared"}
-    _sysyamls = sorted(_glob.glob(f"{_contracts_root}/*/*/_system.yaml"))
-    systems = []
-    for p in _sysyamls:
-        try:
-            data = _yaml.safe_load(open(p, encoding="utf-8")) or {}
-        except Exception:
-            continue
-        d, s = data.get("domain"), data.get("system")
-        if not d or not s or s in SKIP:
-            continue
-        systems.append((d, s, p))
-    print(f"🔎 Discovered {len(systems)} systems: " + ", ".join(f"{d}/{s}" for d, s, _ in systems))
-
-    # 2) Map produced contract names → owning (domain, system)
-    owner = {}
-    for d, s, p in systems:
-        for c in _glob.glob(f"{Path(p).parent}/contracts/*/*.yaml"):
-            try:
-                data = _yaml.safe_load(open(c, encoding="utf-8")) or {}
-            except Exception:
-                continue
-            tbl = (data.get("info") or {}).get("table_name") or ""
-            resolved = (tbl.replace("{bronze_layer}", "bronze").replace("{silver_layer}", "silver")
-                        .replace("{gold_layer}", "gold").replace("{system}", s).replace("{domain}", d))
-            if resolved:
-                owner[resolved] = (d, s)
-            owner.setdefault(_re.sub(r"_v\d+\.\d+$", "", Path(c).stem), (d, s))
-
-    # 3) Cross-system FK edges from bronze contracts' foreign_key refs
-    nodes = {(d, s) for d, s, _ in systems}
-    edges = _dd(set)
-    for d, s, p in systems:
-        for c in _glob.glob(f"{Path(p).parent}/contracts/bronze/*.yaml"):
-            try:
-                data = _yaml.safe_load(open(c, encoding="utf-8")) or {}
-            except Exception:
-                continue
-            for field in ((data.get("model") or {}).get("fields") or []):
-                fk = field.get("foreign_key")
-                ref = fk.get("contract") if fk else None
-                if not ref:
-                    continue
-                for cand in {ref, ref.replace("{bronze_layer}", "bronze").replace("{silver_layer}", "silver").replace("{system}", s).replace("{domain}", d)}:
-                    if cand in owner and owner[cand] != (d, s):
-                        edges[(d, s)].add(owner[cand])
-
-    # 4) Topological sort (Kahn) — upstream first
-    in_deg = {n: 0 for n in nodes}
-    fwd = _dd(set)
-    for down, ups in edges.items():
-        for u in ups:
-            if down in nodes and u in nodes:
-                in_deg[down] += 1
-                fwd[u].add(down)
-    q = _deque(sorted(n for n in nodes if in_deg[n] == 0))
-    run_order = []
-    while q:
-        n = q.popleft(); run_order.append(n)
-        for nxt in sorted(fwd[n]):
-            in_deg[nxt] -= 1
-            if in_deg[nxt] == 0:
-                q.append(nxt)
-    if len(run_order) != len(nodes):  # cycle → fall back to discovery order
-        run_order = [(d, s) for d, s, _ in systems]
-    print("🧭 FK-ordered run plan:")
-    for i, (d, s) in enumerate(run_order, 1):
-        deps = ", ".join(f"{u[0]}/{u[1]}" for u in sorted(edges.get((d, s), set()))) or "—"
-        print(f"  {i:2}. {d}/{s}  (deps: {deps})")
-
-    # 5) Per wave: generate landing data + run bronze+silver (so downstream sees real ids)
-    _paths = {(d, s): p for d, s, p in systems}
-    for wave, (d, s) in enumerate(run_order, 1):
-        print(f"\n{'═'*70}\n▶ WAVE {wave}/{len(run_order)}: {d}/{s}\n{'═'*70}")
-        reg = DomainRegistry.from_yaml(path=_paths[(d, s)], environment=ENVIRONMENT, storage_mode=mode)
-        luri = reg.storage.landing_root if mode == "uc" else reg.storage.landing_path
-        g = GENERATORS.get((d, s))
-        if g is None:
-            print(f"   ⏩ no generator for {d}/{s} — skipping")
-        else:
-            print(f"   ⚙️  {g.__name__} → {luri}")
-            g(reg, luri)
-        try:
-            print("   🏗  bronze + silver …")
-            _run_bronze_silver(reg)
-        except Exception as e:
-            print(f"   ⚠️  bronze+silver failed for {d}/{s}: {e}")
-    print(f"\n✅ All-domains seed complete — {len(run_order)} systems in FK order.")
+      report = seed_bronze_estate(
+        REGISTRY_PATH, OUT_ROOT,
+        environment=environment, rows=ROWS, seed=SEED, invalid_ratio=INVALID_RATIO,
+        duplicate_ratio=DUPLICATE_RATIO,
+        entities=ENTITIES or None, rows_by_entity=ROWS_BY_ENTITY,
+        batches=BATCHES, generative=GENERATIVE,
+    )
+    print("=" * 70)
+    for r in report:
+        print(f"  {r['entity']}: {r['rows']} rows -> {r['path']} "
+              f"[{r['format']}, {r.get('batches', 1)} batch file(s)]")
+    print(f"  Synthetic bronze estate: {len(report)} table(s) in schema '{SCHEMA}'.")
+    print("=" * 70)
+except Exception:
+    tb = traceback.format_exc()
+    print(tb)
+    try:
+        import os
+        # The domain's log volume, beside the landing volume: /Volumes/<catalog>/<schema>/
+        # lakelogic_logs. Splitting on `/landing_` only matched the old external layout; under a
+        # managed `landing` volume it wrote the report into the landing data (2026-10-30).
+        _parts = OUT_ROOT.strip("/").split("/")
+        _log_dir = (f"/Volumes/{_parts[1]}/{_parts[2]}/lakelogic_logs"
+                    if len(_parts) >= 4 and _parts[0] == "Volumes"
+                    else f"{OUT_ROOT.rsplit('/landing_', 1)[0]}/lakelogic_logs")
+        os.makedirs(_log_dir, exist_ok=True)
+        with open(f"{_log_dir}/synthetic_seed_error.txt", "w", encoding="utf-8") as _fh:
+            _fh.write(tb)
+    except Exception:
+        pass
+    raise

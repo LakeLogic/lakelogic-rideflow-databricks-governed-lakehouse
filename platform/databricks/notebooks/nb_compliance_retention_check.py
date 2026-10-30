@@ -1,161 +1,233 @@
 # Databricks notebook source
-# ═══════════════════════════════════════════════════════════════════════════════
-# Notebook  : nb_compliance_retention_check — Retention Check
-# Purpose   : Read-only. Compares each table's oldest record to the retention
-#             window its domain declares (`retention:` in _domain.yaml), records
-#             every observation in the engine's `_lakelogic_retention_evidence`
-#             table beside the domain's run log, and reports the results to
-#             LakeLogic as retention checks. NEVER deletes.
-#
-# Modelled on the LakeLogic Build Centre notebook of the same name, adapted to
-# this bundle's resolution: the registry is the staged `_system.yaml` in the
-# `_contracts` Volume, and the catalog is derived from that Volume path — the
-# same derivation nb_pipeline_driver and nb_slo_checks use.
-#
-# Widgets:
-#   registry_path  : Required. /Volumes/<catalog>/nondelta/_contracts/<domain>/<system>/_system.yaml
-#   environment    : dev | staging | prod
-#   fail_on_breach : true fails the job when a table holds data past its window;
-#                    false records and reports only.
-# ═══════════════════════════════════════════════════════════════════════════════
 
-dbutils.widgets.text("lakelogic_wheel", "", "LakeLogic wheel (blank = PyPI)")
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC # compliance_retention_check - retention check (Databricks)
+# MAGIC
+# MAGIC Read-only: compares the oldest record to each retention window. Never deletes. LakeLogic's engine writer records each observation to <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">lakelogic_retention_evidence</span>, beside the domain's <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">lakelogic_run_log</span>.
+# MAGIC
+# MAGIC **What this notebook does**
+# MAGIC
+# MAGIC 1. Installs LakeLogic.
+# MAGIC 2. Reads the parameters and, optionally, configures telemetry.
+# MAGIC 3. Loads the system registry.
+# MAGIC 4. Resolves the engine's retention evidence table.
+# MAGIC 5. Compares each table's oldest record to its retention window and records the observation. Never deletes.
+# MAGIC
+# MAGIC **Parameters**
+# MAGIC
+# MAGIC | Widget | Meaning |
+# MAGIC |---|---|
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">catalog</span> | Unity Catalog this run reads and writes |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">contracts_root</span> | workspace folder holding <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">contracts/</span> |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">domain</span> / <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">system</span> | which <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">_system.yaml</span> registry to load |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">environment</span> | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">dev</span> \| <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">staging</span> \| <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">prod</span> |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">storage_mode</span> | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">catalog</span> \| <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">path</span> |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">telemetry_endpoint</span> (or <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">telemetry_endpoint_secret</span> in the key's scope), <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">telemetry_key</span> (or <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">telemetry_key_scope</span> + <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">telemetry_key_secret</span>) | optional run reporting to LakeLogic |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">lakelogic_version</span> / <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">lakelogic_wheel</span> | install source (blank = latest from PyPI; a wheel wins) |
+# MAGIC
+# MAGIC Generated by LakeLogic Lakehouse Studio. Edit it here or in Studio; Studio's changes arrive as a pull request.
+# MAGIC generated by: LakeLogic Lakehouse Studio
+# MAGIC revision: chv1:2363087383756d2867a21c9f1cf6b32fb0a38381dc34251cc866a0f28a067fb9
+# MAGIC governance seal: sha256:f73b1d4ee46b840f739932844b48ac4c237a543305f8673f2258a48d95d17a7c
+# MAGIC source: estate snapshot snap-8db66a0e80c042cd
+# MAGIC
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 1. Install LakeLogic
+# MAGIC
+# MAGIC Databricks pre-installs the packages named in a <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">%pip</span> cell at session start, so a
+# MAGIC bare <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">lakelogic</span> can report "already satisfied" and silently keep an older build --
+# MAGIC the run then tests the wrong code while looking correct. <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">--upgrade</span> (or an explicit
+# MAGIC <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">==</span>) forces pip to act. <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">restartPython()</span> is required after any <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">%pip</span> install
+# MAGIC before the new version is importable.
+
+# COMMAND ----------
+
+# DBTITLE 1,Resolve install source
+# Declare the parameters (the job passes values for these).
 dbutils.widgets.text("lakelogic_version", "", "LakeLogic version (blank = latest)")
-_wheel = dbutils.widgets.get("lakelogic_wheel").strip()
+dbutils.widgets.text("lakelogic_wheel", "", "LakeLogic wheel (blank = PyPI)")
+# The extras the design needs: `documents` is added only when it reads PDFs, images or Word.
+dbutils.widgets.text("lakelogic_extras", "synthetic,pdf", "LakeLogic extras")
+
+# Read them.
 _version = dbutils.widgets.get("lakelogic_version").strip()
-# --force-reinstall / == / --upgrade: Databricks pre-installs the packages named in
-# the %pip cell at session start, so a bare `lakelogic` is "already satisfied" by an
-# older build and the run silently tests the wrong code (see nb_pipeline_driver).
+_wheel = dbutils.widgets.get("lakelogic_wheel").strip()
+_extras = dbutils.widgets.get("lakelogic_extras").strip() or "synthetic,pdf"
+# [synthetic] brings Faker for realistic values; [pdf] reads PDFs for document contracts.
+# A wheel wins over a version. `--force-reinstall` because Databricks pre-installs the
+# packages named in this cell at session start: without it a same-version wheel is
+# "already satisfied" and the run silently executes the PUBLISHED build instead.
 if _wheel:
-    lakelogic_pkg = f"{_wheel} --force-reinstall"
+    # The extras on the wheel path too: a bare wheel installs no extras, and the
+    # synthetic seed needs reportlab to write documents. pip accepts extras on a local
+    # file exactly as it does on a package name.
+    lakelogic_pkg = f"{_wheel}[{_extras}] --force-reinstall"
 elif _version:
-    lakelogic_pkg = f"lakelogic=={_version}"
+    lakelogic_pkg = f"lakelogic[{_extras}]=={_version}"
 else:
-    lakelogic_pkg = "lakelogic --upgrade"
+    lakelogic_pkg = f"lakelogic[{_extras}] --upgrade"
 print(f"Installing LakeLogic from: {lakelogic_pkg}")
 
 # COMMAND ----------
 
-# MAGIC # pyarrow<25: DBR ships 21.0.0, lakelogic needs >=23.0.1, databricks-connect caps <25.
+# DBTITLE 1,Install LakeLogic
+# MAGIC # pyarrow<25: DBR ships an older pyarrow than lakelogic needs, and
+# MAGIC # databricks-connect caps it below 25. pyyaml/polars/deltalake arrive as
+# MAGIC # lakelogic's own dependencies and are not named here.
 # MAGIC %pip install $lakelogic_pkg "pyarrow<25"
 
 # COMMAND ----------
 
+# DBTITLE 1,Restart Python
 dbutils.library.restartPython()
 
 # COMMAND ----------
 
-# Fail loudly if the engine is not the one asked for. A pinned `pip install lakelogic==X`
-# that cannot be satisfied (e.g. Databricks' PyPI index has not picked up a fresh release)
-# prints an ERROR and the notebook CARRIES ON with the pre-installed version - a run that
-# looks fine while executing old code (seen 2026-10-04: 1.69.0 requested, 1.68.0 ran).
-import lakelogic as _ll
-_want = (dbutils.widgets.get("lakelogic_version") or "").strip()
-if _want and _ll.__version__ != _want:
-    raise RuntimeError(
-        f"LakeLogic {_want} was requested but {_ll.__version__} is installed - the pip install "
-        "failed (see the install cell). Re-run once the release is on Databricks' PyPI index."
-    )
-print(f"LakeLogic {_ll.__version__}")
+# MAGIC %md
+# MAGIC ## 2. Parameters
+# MAGIC
+# MAGIC Widgets arrive as strings; a job run overrides them per run. One widget per line.
+
+# COMMAND ----------
+
+# DBTITLE 1,Parameters
+# Parameters - the pipeline overrides these per (domain, system). Widgets return STRINGS.
+# Declare the parameters (the job passes values for these).
+dbutils.widgets.text("catalog", "", "catalog")  # the Unity Catalog this run reads and writes
+dbutils.widgets.text("contracts_root", "", "contracts_root")
+dbutils.widgets.text("domain", "lakehouse", "domain")
+dbutils.widgets.text("system", "lakehouse", "system")
+dbutils.widgets.text("environment", "dev", "environment")                 # a key of _system.yaml environments
+dbutils.widgets.text("storage_mode", "catalog", "storage_mode")
+dbutils.widgets.dropdown("fail_on_breach", "true", ["true", "false"], "fail_on_breach")  # fail the job when a table breaches; false = record and report only
+dbutils.widgets.text("telemetry_endpoint", "", "telemetry_endpoint")      # LakeLogic run-log ingest URL. Empty = do not report.
+dbutils.widgets.text("telemetry_key", "", "telemetry_key")                # LakeLogic API key. Supplied per run, never stored here.
+dbutils.widgets.text("telemetry_key_scope", "", "telemetry_key_scope")    # OR: the Databricks secret SCOPE holding the key
+dbutils.widgets.text("telemetry_key_secret", "", "telemetry_key_secret")  # OR: the secret NAME in that scope. Not a secret itself.
+dbutils.widgets.text("telemetry_endpoint_secret", "", "telemetry_endpoint_secret")  # OR: the secret NAME in that scope holding the ingest URL. Not a secret itself.
+
+# Read them.
+catalog = dbutils.widgets.get("catalog")
+contracts_root = dbutils.widgets.get("contracts_root")
+domain = dbutils.widgets.get("domain")
+system = dbutils.widgets.get("system")
+environment = dbutils.widgets.get("environment")
+fail_on_breach = dbutils.widgets.get("fail_on_breach").strip().lower() != "false"
+storage_mode = dbutils.widgets.get("storage_mode")
+telemetry_endpoint = dbutils.widgets.get("telemetry_endpoint")
+telemetry_key = dbutils.widgets.get("telemetry_key")
+telemetry_key_scope = dbutils.widgets.get("telemetry_key_scope")
+telemetry_key_secret = dbutils.widgets.get("telemetry_key_secret")
+telemetry_endpoint_secret = dbutils.widgets.get("telemetry_endpoint_secret")
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## ⚙️ Config
+# MAGIC ## 3. Telemetry
+# MAGIC
+# MAGIC Reports this run to LakeLogic only when an endpoint and a key are supplied. The key comes from the run parameter or a Databricks secret scope; it is never printed.
 
 # COMMAND ----------
 
-dbutils.widgets.removeAll()
-
-dbutils.widgets.text("registry_path", "", "Config - Registry YAML")
-dbutils.widgets.dropdown("environment", "dev", ["dev", "staging", "prod"], "Config - Environment")
-dbutils.widgets.dropdown("fail_on_breach", "true", ["true", "false"], "Exec - Fail on breach")
-
-REGISTRY_PATH = dbutils.widgets.get("registry_path").strip()
-
-# ── LakeLogic telemetry: where run logs go (optional) ─────────────────────────
-# Two job/notebook parameters, the same in every pipeline notebook:
-#   telemetry_scope      Databricks secret scope holding `lakelogic-observatory-endpoint`
-#                        and `lakelogic-api-key` (default "rideflow"). Point a quick test at
-#                        another workspace by passing another scope, e.g. "rideflow-stage".
-#   observatory_endpoint Optional URL override (not secret). The API KEY is never a
-#                        parameter: parameters show in the run UI, so it comes from the scope.
-# The _domain.yaml observatory block reads ${LAKELOGIC_OBSERVATORY_ENDPOINT} and
-# ${LAKELOGIC_API_KEY}; this sets them. No scope/keys -> the pipeline runs without telemetry.
-import os as _os
-
-def _param(name, default, label):
-    try:
-        return dbutils.widgets.get(name).strip()
-    except Exception:
-        dbutils.widgets.text(name, default, label)
-        return dbutils.widgets.get(name).strip()
-
-_TELEMETRY_SCOPE = _param("telemetry_scope", "rideflow", "Telemetry - secret scope")
-_ENDPOINT_OVERRIDE = _param("observatory_endpoint", "", "Telemetry - endpoint override (optional)")
-for _env, _key in (("LAKELOGIC_OBSERVATORY_ENDPOINT", "lakelogic-observatory-endpoint"),
-                   ("LAKELOGIC_API_KEY", "lakelogic-api-key")):
-    if _os.environ.get(_env):
-        continue  # a job's spark_env_vars wins
-    try:
-        _os.environ[_env] = dbutils.secrets.get(_TELEMETRY_SCOPE, _key)
-    except Exception:
-        pass
-if _ENDPOINT_OVERRIDE:
-    _os.environ["LAKELOGIC_OBSERVATORY_ENDPOINT"] = _ENDPOINT_OVERRIDE
-print("LakeLogic telemetry:", "ON -> " + _os.environ["LAKELOGIC_OBSERVATORY_ENDPOINT"]
-      if _os.environ.get("LAKELOGIC_OBSERVATORY_ENDPOINT") and _os.environ.get("LAKELOGIC_API_KEY")
-      else f"off (no keys in secret scope '{_TELEMETRY_SCOPE}')")
-ENVIRONMENT = dbutils.widgets.get("environment").strip() or "dev"
-FAIL_ON_BREACH = dbutils.widgets.get("fail_on_breach").strip().lower() != "false"
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## 📚 Load the registry
-
-# COMMAND ----------
-
-import datetime
+# DBTITLE 1,Configure telemetry
 import os
-import uuid
+# Report this run to LakeLogic if an endpoint and key are supplied.
+# Key: `telemetry_key` (Run dialog, for test runs), or `telemetry_key_scope` + `telemetry_key_secret`
+# (the job run-as identity needs READ on the scope; use this for scheduled runs).
+_telemetry_key = str(telemetry_key).strip()
+_telemetry_source = "run parameter"
+if not _telemetry_key and str(telemetry_key_scope).strip() and str(telemetry_key_secret).strip():
+    try:
+        _telemetry_key = dbutils.secrets.get(
+            str(telemetry_key_scope).strip(), str(telemetry_key_secret).strip()
+        ).strip()
+        _telemetry_source = "secret scope"
+    except Exception as _kv_exc:
+        # Print the exception type only, so no secret is echoed.
+        print(f"Telemetry: could not read the key from the secret scope ({type(_kv_exc).__name__})")
+# Endpoint: `telemetry_endpoint` (a variable or the Run dialog), else `telemetry_endpoint_secret` in the
+# same scope as the key, so a Key Vault-backed scope can hold both and nothing is passed at deploy.
+if not str(telemetry_endpoint).strip() and str(telemetry_key_scope).strip() and str(telemetry_endpoint_secret).strip():
+    try:
+        telemetry_endpoint = dbutils.secrets.get(
+            str(telemetry_key_scope).strip(), str(telemetry_endpoint_secret).strip()
+        )
+    except Exception as _exc:  # noqa: BLE001 - reporting is optional; the run goes on
+        print(f"Telemetry: endpoint secret not readable ({type(_exc).__name__}); not reporting.")
+if str(telemetry_endpoint).strip() and _telemetry_key:
+    os.environ["LAKELOGIC_CLOUD_ENDPOINT"] = str(telemetry_endpoint).strip()
+    os.environ["LAKELOGIC_CLOUD_API_KEY"] = _telemetry_key
+    print(f"Telemetry: reporting to {telemetry_endpoint} (key from {_telemetry_source})")
+else:
+    print("Telemetry: not configured for this run — run logs stay in the lakehouse.")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 4. Load the registry
+# MAGIC
+# MAGIC Resolves <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">{contracts_root}/{domain}/{system}/_system.yaml</span> and the helpers that map each contract to its physical table.
+
+# COMMAND ----------
+
+# DBTITLE 1,Load registry
+import os, json, hashlib, datetime, traceback, uuid
+
+os.environ[f"DATABRICKS_{environment.upper()}_CATALOG"] = catalog
+REGISTRY_PATH = f"{contracts_root}/{domain}/{system}/_system.yaml"
+print(f"Registry: {REGISTRY_PATH}  (env: {environment})")
 
 from lakelogic.core.registry import DomainRegistry
 
-print(f"Loading Registry: {REGISTRY_PATH} (env: {ENVIRONMENT})")
-# ── Catalog — derived from the registry Volume path ──────────────────────────
-# THE SAME DERIVATION THE PIPELINE DRIVER USES. Without it `{catalog}` resolves to
-# an empty string and every table name is built as `.marketplace.<table>`.
-_derived_catalog = "rideflow_dev_platform"
-if REGISTRY_PATH.startswith("/Volumes/"):
-    _parts = REGISTRY_PATH.split("/")
-    if len(_parts) > 2 and _parts[2]:
-        _derived_catalog = _parts[2]
-os.environ.setdefault(f"RIDEFLOW_{ENVIRONMENT.upper()}_CATALOG", _derived_catalog)
-print(f"Catalog: {_derived_catalog}")
-
-# storage_mode="uc" matches the pipeline driver, so the roots resolve to the tables it wrote.
-registry = DomainRegistry.from_yaml(REGISTRY_PATH, environment=ENVIRONMENT, storage_mode="uc")
+registry = DomainRegistry.from_yaml(REGISTRY_PATH, environment=environment, storage_mode=storage_mode)
 RUN_ID = str(uuid.uuid4())
-DOMAIN = getattr(registry, "domain", None) or REGISTRY_PATH.split("/")[-3]
-SYSTEM = getattr(registry, "system", None) or REGISTRY_PATH.split("/")[-2]
+
+if "spark" not in dir():
+    raise RuntimeError("No Spark session - run this notebook attached to the lakehouse.")
+
+
+def table_of(contract):
+    """The physical table a contract writes, resolved as SLOValidator resolves it: the
+    contract's own info.table_name under the layer root, else under the domain catalog."""
+    info = (contract.contract_dict or {}).get("info") or {}
+    table = str(info.get("table_name") or "").strip()
+    if not table:
+        return None
+    base = getattr(registry.storage, f"{contract.layer}_root", None) or getattr(
+        registry.storage, "domain_catalog", None
+    )
+    return f"{base}.{table}".replace("`", "") if base else None
+
+
+def exists(table):
+    try:
+        return bool(spark.catalog.tableExists(table))  # noqa: F821 - Databricks injects spark
+    except Exception:
+        return False
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## 🧾 Evidence table
+# MAGIC ## 5. Evidence table
 # MAGIC
-# MAGIC The engine owns the evidence table: its name (`_lakelogic_retention_evidence`),
-# MAGIC its schema, and its place — beside the run log this system declares in
-# MAGIC `_system.yaml` (`metadata.run_log_table`).
+# MAGIC The engine owns the evidence table: its name, schema and location beside the domain's <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">lakelogic_run_log</span>.
 
 # COMMAND ----------
 
+# DBTITLE 1,Resolve evidence table
 from lakelogic.core.evidence_tables import resolve_evidence_target, write_evidence_rows
 
+# The engine owns the evidence table: its name (`lakelogic_retention_evidence`), its schema,
+# and its place - beside the run log this system declares in `_system.yaml`
+# (`metadata.run_log_table`), i.e. in the domain schema next to `lakelogic_run_log`.
 _run_log_table = str((getattr(registry, "metadata", None) or {}).get("run_log_table") or "")
 if not _run_log_table or "{" in _run_log_table:
-    _run_log_table = f"{registry.storage.domain_catalog}._lakelogic_run_log"
+    _run_log_table = f"{registry.storage.domain_catalog}.lakelogic_run_log"
 EVIDENCE_METADATA = {"run_log_table": _run_log_table, "run_log_backend": "spark"}
 _target = resolve_evidence_target("retention_evidence", EVIDENCE_METADATA, engine_name="spark")
 EVIDENCE_TABLE = _target[1] if _target else None
@@ -164,16 +236,18 @@ print(f"Retention evidence: {EVIDENCE_TABLE}")
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## 🕰️ Check retention windows
+# MAGIC ## 6. Check retention windows
 # MAGIC
 # MAGIC Read-only: reports what is held past its window; nothing is deleted.
 
 # COMMAND ----------
 
+# DBTITLE 1,Check retention
 from lakelogic.core.slo import SLOValidator
 
+# Read-only: compares each table's oldest record to its retention window. Never deletes.
 if not registry.retention:
-    print(f"{DOMAIN}/{SYSTEM}: no retention declared (not_configured). Nothing to check.")
+    print(f"{domain}/{system}: no retention declared (not_configured). Nothing to check.")
     results = []
 else:
     results = SLOValidator(registry, spark=spark).check_retention()  # noqa: F821
@@ -186,18 +260,20 @@ for r in results:
     if is_breach:
         breached.append(r)
     rows.append({
-        "layer": getattr(r, "layer", None),
-        "entity": getattr(r, "entity", None),
-        "state": "breached" if is_breach else "observed",
+        "run_id": RUN_ID, "checked_at": checked_at, "domain": domain, "system": system,
+        "environment": environment, "layer": getattr(r, "layer", None),
+        "entity": getattr(r, "entity", None), "state": "breached" if is_breach else "observed",
+        "status": status, "detail": {k: v for k, v in vars(r).items() if not k.startswith("_")},
     })
     print(f"  {rows[-1]['state']:<9} {getattr(r, 'layer', '?'):<8} {getattr(r, 'entity', '?')}")
 
-
+# The engine's retention_evidence columns: policy = the layer's retention window (e.g. "P7D"),
+# status = one word, detail = the check's own message. The check is read-only, so rows_expired
+# is None ("not measured"), never 0.
 def _window(layer):
     ret = registry.retention or {}
     val = ret.get(layer) if isinstance(ret, dict) else getattr(ret, layer, None)
     return str(val) if val else None
-
 
 try:  # one normaliser for new tokens (ERROR, NO_DATA, BREACHED, OK) and old icon strings
     from lakelogic.core.slo import normalize_status as _token
@@ -205,7 +281,6 @@ except ImportError:  # older lakelogic
     def _token(s):
         u = str(s or "").upper()
         return "ERROR" if "ERROR" in u else "NO_DATA" if "NO DATA" in u else None
-
 
 def _outcome(r, row):
     token = _token(getattr(r, "status", None))
@@ -215,19 +290,17 @@ def _outcome(r, row):
         return "no_data"
     return "breached" if row["state"] == "breached" else "passed"
 
-
 def _detail(r):
+    # The check's human sentence, no icons. Older engines had no `message`, only the status prose.
     msg = getattr(r, "message", None)
     if msg:
         return str(msg)
     return str(getattr(r, "status", "") or "").encode("ascii", "ignore").decode().strip()
 
-
 _now = datetime.datetime.now(datetime.timezone.utc)
-# rows_expired is None ("not measured"), never 0: this check is read-only.
 _engine_rows = [{
     "run_id": RUN_ID, "timestamp": _now,
-    "table_name": f"{DOMAIN}.{row['layer']}.{row['entity']}",
+    "table_name": f"{domain}.{row['layer']}.{row['entity']}",
     "policy": _window(row["layer"]),
     "cutoff": getattr(r, "cutoff", None) if isinstance(getattr(r, "cutoff", None), datetime.datetime) else None,
     "rows_expired": None,
@@ -246,14 +319,14 @@ if results:
     from lakelogic.core.run_log import emit_slo_report
 
     if "record_type" in _inspect.signature(emit_slo_report).parameters:
-        sent = emit_slo_report(registry, results, environment=ENVIRONMENT,
+        sent = emit_slo_report(registry, results, environment=environment,
                                record_type="retention_check", engine="retention")
         print(f"Reported {sent} retention row(s) to LakeLogic.")
     else:
         print("This lakelogic cannot report retention checks separately - upgrade to send them to LakeLogic.")
-
-# Every table is checked and its evidence written BEFORE this.
+# Every table is checked and its evidence written BEFORE this. Parameter-driven, like the SLO
+# job: true fails the job so the platform alerts; false keeps it green, the breach stays data.
 if breached:
-    if FAIL_ON_BREACH:
+    if fail_on_breach:
         raise Exception(f"{len(breached)} table(s) hold data beyond their declared retention period.")
     print(f"{len(breached)} table(s) breach retention; recorded, not failing the job (fail_on_breach=false).")

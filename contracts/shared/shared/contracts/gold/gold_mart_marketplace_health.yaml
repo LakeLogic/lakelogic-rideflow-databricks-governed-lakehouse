@@ -147,7 +147,7 @@ links:
     path: "table:`{domain_catalog_prefix}_marketplace`.silver.silver_rideflow_trip_requests"
   - name: mp_trips
     type: table
-    path: "table:`{domain_catalog_prefix}_marketplace`.silver.silver_rideflow_trips"
+    path: "table:`{domain_catalog_prefix}_marketplace`.silver.silver_rideflow_trip_completed"
   - name: mp_cancels
     type: table
     path: "table:`{domain_catalog_prefix}_marketplace`.silver.silver_rideflow_trip_cancellations"

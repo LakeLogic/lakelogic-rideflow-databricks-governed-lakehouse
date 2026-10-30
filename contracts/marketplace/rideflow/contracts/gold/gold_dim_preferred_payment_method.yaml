@@ -3,7 +3,10 @@ version: 1.0.0
 info:
   title: Gold — Dim Preferred Payment Method
   target_layer: gold
-  description: 'grain: one row per preferred_payment_method'
+  description: Riders' preferred ways to pay, such as a card or digital wallet, captured
+    so the business can see how customers choose to pay. Each record carries a surrogate
+    key, with a special value of '-1' standing for riders whose payment method is
+    unknown, and a source-system marker for tracing where the information came from.
   table_name: '{gold_layer}_dim_preferred_payment_method'
   system: rideflow
   domain: marketplace
@@ -18,8 +21,8 @@ model:
   - name: preferred_payment_method
     type: string
     required: true
-    description: Dimension attribute 'preferred_payment_method', projected from the
-      'preferred_payment_method' entity.
+    description: The payment method a rider prefers to use, such as a card or digital
+      wallet, used to understand how customers choose to pay.
   - name: system
     type: string
     required: true
@@ -40,7 +43,6 @@ quality:
       description: No two rows share the same preferred_payment_method.
 
 materialization:
-  strategy: merge
   scd1:
     surrogate_key: preferred_payment_method_sk
     surrogate_key_strategy: hash
@@ -51,9 +53,13 @@ materialization:
 transformations:
 - phase: pre
   sql: |-
-    SELECT DISTINCT preferred_payment_method, 'rideflow' AS system
+    SELECT DISTINCT preferred_payment_method
     FROM source
     WHERE preferred_payment_method IS NOT NULL
+- phase: pre
+  derive:
+    field: system
+    sql: '''rideflow'''
 
 source:
   type: table
@@ -62,4 +68,4 @@ source:
   watermark_field: _lakelogic_processed_at
 
 metadata:
-  run_log_table: '{domain_catalog}._lakelogic_run_log'
+  run_log_table: '{domain_catalog}.lakelogic_run_log'

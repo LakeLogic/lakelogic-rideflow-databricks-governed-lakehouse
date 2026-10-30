@@ -6,11 +6,11 @@
 # "workspace_id mismatch". This wrapper detects that one error, clears the stale
 # state for the target, and redeploys — so you never have to do it by hand.
 #
-# Usage:   .\deploy.ps1                    (target=dev, profile=rideflow_dev)
+# Usage:   .\deploy.ps1                    (target=dev, profile=DEFAULT)
 #          .\deploy.ps1 -Target dev -Profile my_profile
 param(
   [string]$Target  = "dev",
-  [string]$Profile = "rideflow_dev"
+  [string]$Profile = "DEFAULT"
 )
 Set-Location $PSScriptRoot
 

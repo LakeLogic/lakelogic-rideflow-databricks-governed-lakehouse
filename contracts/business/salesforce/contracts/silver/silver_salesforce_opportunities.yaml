@@ -1,0 +1,124 @@
+version: 1.0.0
+
+info:
+  title: Silver — Salesforce Opportunities
+  target_layer: silver
+  table_name: '{silver_layer}_salesforce_opportunities'
+  system: salesforce
+  domain: business
+
+model:
+  fields:
+  - name: attributes
+    type: json
+    required: false
+    description: Column 'attributes' projected from source table 'salesforce_opportunities',
+      typed as json.
+  - name: Id
+    type: string
+    required: true
+    description: Business key 'Id' (from source table 'salesforce_opportunities'),
+      typed as string.
+  - name: AccountId
+    type: string
+    required: false
+    description: Column 'AccountId' projected from source table 'salesforce_opportunities',
+      typed as string.
+  - name: Name
+    type: string
+    required: false
+    pii: true
+    classification: person_name
+    description: Column 'Name' projected from source table 'salesforce_opportunities',
+      typed as string. Personal data (person_name), not masked.
+  - name: StageName
+    type: string
+    required: true
+    description: Column 'StageName' projected from source table 'salesforce_opportunities',
+      typed as string.
+  - name: Probability
+    type: Int64
+    required: false
+    description: Column 'Probability' projected from source table 'salesforce_opportunities',
+      typed as Int64.
+  - name: Amount
+    type: decimal(18,2)
+    required: false
+    description: Column 'Amount' projected from source table 'salesforce_opportunities',
+      typed as decimal(18,2).
+  - name: CloseDate
+    type: date
+    required: false
+    description: Column 'CloseDate' projected from source table 'salesforce_opportunities',
+      typed as date.
+  - name: LeadSource
+    type: string
+    required: false
+    description: Column 'LeadSource' projected from source table 'salesforce_opportunities',
+      typed as string.
+  - name: OwnerId
+    type: string
+    required: false
+    description: Column 'OwnerId' projected from source table 'salesforce_opportunities',
+      typed as string.
+  - name: CreatedDate
+    type: timestamp
+    required: false
+    description: Column 'CreatedDate' projected from source table 'salesforce_opportunities',
+      typed as timestamp.
+  - name: LastModifiedDate
+    type: timestamp
+    required: false
+    description: Column 'LastModifiedDate' projected from source table 'salesforce_opportunities',
+      typed as timestamp.
+  - name: SystemModstamp
+    type: timestamp
+    required: false
+    description: Column 'SystemModstamp' projected from source table 'salesforce_opportunities',
+      typed as timestamp.
+  - name: IsDeleted
+    type: boolean
+    required: false
+    description: Column 'IsDeleted' projected from source table 'salesforce_opportunities',
+      typed as boolean.
+
+primary_key:
+- Id
+
+quality:
+  row_rules:
+  - name: Id_not_null
+    sql: Id IS NOT NULL
+    category: completeness
+    description: id is always present (never null).
+  - name: Amount_range_min
+    sql: Amount IS NULL OR Amount >= 0
+    category: validity
+    description: Amount is at least 0 when present.
+  - name: Amount_range_max
+    sql: Amount IS NULL OR Amount <= 1000000000
+    category: validity
+    description: Amount is at most 1000000000 when present.
+  - name: StageName_not_null
+    sql: StageName IS NOT NULL
+    category: completeness
+    description: stagename is always present (never null).
+
+transformations:
+- deduplicate:
+    by:
+    - Id
+    sort_by:
+    - LastModifiedDate
+    order: desc
+
+dataset: silver_salesforce_opportunities
+
+source:
+  type: table
+  path: table:{bronze_root}.{bronze_layer}_salesforce_opportunities
+  load_mode: incremental
+  watermark_field: _lakelogic_processed_at
+
+metadata:
+  run_log_table: '{domain_catalog}.lakelogic_run_log'

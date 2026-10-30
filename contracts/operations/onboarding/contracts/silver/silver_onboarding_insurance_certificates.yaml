@@ -1,0 +1,72 @@
+version: 1.0.0
+
+info:
+  title: Silver — Onboarding Insurance Certificates
+  target_layer: silver
+  table_name: '{silver_layer}_onboarding_insurance_certificates'
+  system: onboarding
+  domain: operations
+
+model:
+  fields:
+  - name: file_path
+    type: string
+    required: false
+    description: Column 'file_path' projected from source table 'onboarding_insurance_certificates',
+      typed as string.
+  - name: policy_reference
+    type: string
+    required: false
+    description: Column 'policy_reference' projected from source table 'onboarding_insurance_certificates',
+      typed as string.
+  - name: driver_id
+    type: string
+    required: true
+    description: Column 'driver_id' projected from source table 'onboarding_insurance_certificates',
+      typed as string.
+  - name: registration_mark
+    type: string
+    required: false
+    description: Column 'registration_mark' projected from source table 'onboarding_insurance_certificates',
+      typed as string.
+  - name: cover_start
+    type: timestamp
+    required: false
+    description: Column 'cover_start' projected from source table 'onboarding_insurance_certificates',
+      typed as timestamp.
+  - name: cover_end
+    type: timestamp
+    required: false
+    description: Column 'cover_end' projected from source table 'onboarding_insurance_certificates',
+      typed as timestamp.
+  - name: policyholder_name
+    type: string
+    required: false
+    description: Column 'policyholder_name' projected from source table 'onboarding_insurance_certificates',
+      typed as string.
+  - name: use
+    type: string
+    required: false
+    description: Column 'use' projected from source table 'onboarding_insurance_certificates',
+      typed as string.
+
+materialization:
+  strategy: overwrite
+
+quality:
+  row_rules:
+  - name: driver_id_not_null
+    sql: driver_id IS NOT NULL
+    category: completeness
+    description: driver_id is always present (never null).
+
+dataset: silver_onboarding_insurance_certificates
+
+source:
+  type: table
+  path: table:{bronze_root}.{bronze_layer}_onboarding_insurance_certificates
+  load_mode: incremental
+  watermark_field: _lakelogic_processed_at
+
+metadata:
+  run_log_table: '{domain_catalog}.lakelogic_run_log'

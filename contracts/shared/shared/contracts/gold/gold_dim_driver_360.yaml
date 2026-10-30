@@ -8,7 +8,7 @@ info:
   description: >
     Per-driver 360 view assembled from THREE source domains:
       * marketplace (silver_rideflow_driver_profiles) — identity, status, rating
-      * operations  (silver_checkr_driver_verifications) — background check status
+      * operations  (silver_checkr_background_checks) — background check status
       * payments    (silver_stripe_payouts) — lifetime payout total
     Demonstrates the true cross-domain mart pattern via TransformationJoin.
   target_layer: gold
@@ -80,7 +80,7 @@ transformations:
       cv AS (
         SELECT driver_id, status, completed_at,
                ROW_NUMBER() OVER (PARTITION BY driver_id ORDER BY completed_at DESC) AS rn
-        FROM silver_checkr_driver_verifications
+        FROM silver_checkr_background_checks
       )
       SELECT d.driver_id                              AS driver_id,
              d.name                                   AS full_name,
@@ -112,9 +112,9 @@ links:
   - name: mp_drivers
     type: table
     path: "table:`{domain_catalog_prefix}_marketplace`.silver.silver_rideflow_driver_profiles"
-  - name: silver_checkr_driver_verifications
+  - name: silver_checkr_background_checks
     type: table
-    path: "table:`{domain_catalog_prefix}_operations`.silver.silver_checkr_driver_verifications"
+    path: "table:`{domain_catalog_prefix}_operations`.silver.silver_checkr_background_checks"
   - name: silver_stripe_payouts
     type: table
     path: "table:`{domain_catalog_prefix}_payments`.silver.silver_stripe_payouts"

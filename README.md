@@ -1,279 +1,113 @@
-# Build a governed lakehouse on Databricks
+# RideFlow: a governed data mesh on Databricks
 
-Build data products with domain-owned YAML contracts, quality gates and
-service-level objective (SLO) checks. Inspect rejected records, evaluate retention
-policies and track erasure requests with recorded evidence.
+**Build a decentralised Databricks lakehouse with shared governance.**
 
-**LakeLogic Databricks Lakehouse** is an open-source reference project built with
-[LakeLogic Core](https://pypi.org/project/lakelogic/), Databricks Workflows and Unity
-Catalog. Start with one Marketplace pipeline, then explore products across six
-domains.
+Businesses need data they can trust, but ingestion, transformation and quality checks are often implemented differently across teams. Ownership is unclear, governance is inconsistent, and every new source adds more custom code to maintain. **LakeLogic Core standardises ingestion, transformation, validation and materialisation through executable data contracts**, giving domain teams a consistent way to deliver governed data products.
 
-> RideFlow is a fictional ride-hailing and food-delivery business. All source data
-> is synthetic. This community project is not an official Databricks product.
-> No LakeLogic account or API key is required for the core demo.
+RideFlow demonstrates this in a decentralised Databricks lakehouse: CSV and JSON exports alongside PDFs, images and Word documents, processed through batch pipelines and Spark Structured Streaming.
 
-## What you'll build
+This synthetic reference project uses **Unity Catalog, Delta Lake and Databricks Workflows**, with **158 contracts across seven domains** and Bronze, Silver and Gold layers.
 
-Start with completed-trip facts and rider and driver dimensions for analytics.
-Then explore the monitoring and privacy workflows.
+## Architecture
 
-- **Deliver usable data:** build facts and dimensions through contract-driven pipelines.
-- **Reuse engineering logic:** run domain-owned definitions through shared runners and defaults.
-- **Explain quality failures:** apply schema, row and dataset checks; retain rejected records with their failure reasons.
-- **Evaluate service levels:** check data against domain-defined objectives and inspect the results.
-- **Review retention:** identify data outside declared retention windows and record the observations.
-- **Track erasure:** process scoped requests with dry-run support, recorded status and evidence.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/rideflow_architecture_dark.png">
+  <img alt="RideFlow architecture: domains publish data products into a shared Unity Catalog substrate, governed by contracts as code" src="docs/images/rideflow_architecture_light.png">
+</picture>
 
-**Medallion layers organise the data. Contracts define its expectations.**
-Quarantine is a failure path, not a fourth layer: valid rows can continue when
-policy permits, while dataset gates can stop a run.
+Domains maintain their own contract trees and publish products in separate catalogs. Shared Gold products consume outputs across domain boundaries; reusable drivers and deployment tooling provide the common platform.
 
-![RideFlow data products on Databricks: domains, medallion layers and shared controls](docs/images/rideflow_governed_data_mesh_architecture.png)
+<img src="docs/images/databricks_unity_catalog_domains.png" alt="Unity Catalog after a run: one catalog per domain (rideflow_dev_business, rideflow_dev_marketing, rideflow_dev_marketplace, rideflow_dev_operations and more); the operations catalog holds bronze, files, gold, lakelogic, quarantine and silver schemas" width="340">
 
-## Quickstart
+*RideFlow reference project · synthetic data. In Databricks after a run: one Unity Catalog catalog per domain, each with its own layer, quarantine and run-log schemas.*
 
-### Before you start
+**Why this is a mesh pattern:** domain-local definitions, consumer-facing products, reusable platform execution and shared governance conventions. Catalog separation and declared owners do not automatically establish team permissions; configure Unity Catalog grants and review responsibilities explicitly.
 
-You need a Databricks workspace with Unity Catalog and serverless compute,
-an authenticated [Databricks CLI](https://docs.databricks.com/dev-tools/cli/)
-(v0.220 or later), and permission to create catalogs, schemas and Volumes. The demo
-creates one catalog per domain and one for the platform's own files.
-For administrator-created catalogs, see [catalog configuration](docs/catalog-configuration.md).
+Domains: Marketplace, Payments, Operations, Marketing, Business, Reference and Shared. Some diagrams predate Business/Salesforce; the contract tree is authoritative. [Explore the architecture](docs/architecture-reference.md)
 
-Use a dedicated demo environment. Databricks compute and storage charges or
-workspace quotas apply independently of the open-source project.
+## What you can learn
 
-### Deploy and run
-
-Clone the current GitHub repository into a shorter local directory:
-
-```bash
-git clone https://github.com/LakeLogic/lakelogic-databricks-data-mesh-lakehouse.git lakelogic-databricks-lakehouse
-cd lakelogic-databricks-lakehouse/platform/databricks
-
-databricks auth login --host https://<your-workspace-host> -p rideflow_dev
-databricks -p rideflow_dev current-user me
-```
-
-**Before deploying:** review [bundle variables](platform/databricks/databrick_variables.yml).
-Replace the demo-specific `catalog_storage_root` with your permitted managed
-storage location, or set it to an empty string if your metastore supplies one.
-Keep `reset_catalog: "false"`; enabling it deletes and rebuilds the catalog.
-Review [catalog configuration](docs/catalog-configuration.md) if using an existing catalog.
-
-Catalog names must be unique in a metastore. The domain catalogs are named
-`<domain_catalog_prefix>_<domain>`, and the prefix is set per environment in each
-system's `_system.yaml` (`rideflow_dev` for `dev`). Change it there if those names
-are taken.
-
-Run all bundle commands from this `platform/databricks/` directory:
-
-```bash
-databricks bundle validate -t dev -p rideflow_dev
-databricks bundle deploy -t dev -p rideflow_dev
-databricks bundle run setup -t dev -p rideflow_dev
-```
-
-Setup creates the catalogs, schemas and Volumes, stages contracts, generates sample
-data, runs **Marketplace** through bronze, silver and gold, and checks the outputs.
-It does **not** populate every domain or run the separate SLO, retention and
-erasure jobs. Explore those after loading the relevant data; review privacy-job
-scope before execution. Setup time depends on your workspace.
-
-To build every domain in dependency order, run the mesh job:
-
-```bash
-databricks bundle run mesh_orchestrator -t dev -p rideflow_dev
-```
-
-### Check the result
-
-In the Databricks SQL editor, run:
-
-```sql
-USE CATALOG rideflow_dev_marketplace;
-SHOW TABLES IN gold;
-SHOW TABLES IN quarantine;
-
-SELECT *
-FROM gold.gold_fact_trip_completed
-LIMIT 20;
-```
-
-Use your own catalog name if you changed the prefix. Inspect a quarantine table to
-see which records failed and why.
-
-![Rejected records with LakeLogic error details in a Databricks quarantine table](docs/images/databricks_quarantine_table.png)
-
-## A data contract example
-
-Data product contracts keep expectations beside the data they describe. This
-project uses [Open Lakehouse Contracts](https://lakelogic.github.io/open-lakehouse-contract/).
-
-Here is an excerpt from the completed-trip fact contract—not a standalone runnable file:
-
-```yaml
-version: 1.0.0
-
-info:
-  title: "Gold — Fact Trip Completed"
-  table_name: "{gold_layer}_fact_trip_completed"
-  description: "grain: one row per completed trip"
-  target_layer: gold
-  domain: marketplace
-  system: rideflow
-
-source:
-  type: table
-  path: "table:{silver_root}.{silver_layer}_rideflow_trips"
-  load_mode: incremental
-  watermark_field: _lakelogic_processed_at
-
-primary_key: [trip_id]
-```
-
-The [complete contract](contracts/marketplace/rideflow/contracts/gold/gold_fact_trip_completed.yaml)
-also defines fields, the as-of lookups of `rider_sk` / `driver_sk` against the SCD2
-rider and driver dimensions, and quality rules. Trip revenue is a business metric;
-quality checks and freshness measures tell you whether the data supporting it
-meets expectations.
-
-## How the data products fit together
-
-| Layer | Purpose in this example |
+| Your focus | What to inspect |
 | --- | --- |
-| Bronze | Capture source-aligned records with flexible schemas |
-| Silver | Type, clean, transform and validate the data |
-| Gold | Publish facts, dimensions and business metrics |
+| Architecture | Domain boundaries, inherited settings and cross-domain dependencies |
+| Engineering | Contract-driven ingestion, transformations, incremental processing and orchestration |
+| Analytics | Gold facts, dimensions and a shared city/day marketplace-health product |
+| Governance | Ownership, quality rules, privacy operations, service expectations and their evidence |
+| Platform delivery | Asset Bundles, environment configuration and repository validation |
 
-Marketplace, Payments, Operations, Marketing and Reference organise source data.
-Shared products combine outputs across domains without duplicating every layer.
+## Run the example
 
-Each domain has its own catalog, with a schema per layer. One grant then covers a
-layer, and the domain team owns the catalog:
+Use isolated demo catalogs. You need an authenticated Databricks CLI, Unity Catalog, suitable compute and setup permissions. [Prerequisites and catalog configuration](docs/catalog-configuration.md)
 
-| Schema in `rideflow_dev_<domain>` | Holds |
-| --- | --- |
-| `files` | Volumes; `landing` receives the inbound source files |
-| `bronze`, `silver`, `gold` | The layer's tables. Table names keep the layer prefix, such as `gold.gold_fact_trip_completed` |
-| `quarantine` | Rows a contract rejected, one table per source table |
-| `lakelogic` | The run log, SLO results, and retention and erasure records |
+**Before deploying:** review [bundle variables and the dev target](platform/databricks/databricks.yml) and replace environment-specific storage locations. Cloud usage incurs costs; synthetic inputs need no live source-system credentials.
 
-The system registry decides this, not the contracts: `storage.bronze_root`,
-`silver_root` and `gold_root` in `_system.yaml` name where each layer lives, and a
-contract reads `{silver_root}.<table>`. The catalog named by the `catalog` bundle
-variable (`rideflow_dev_platform`) holds only the platform's own Volumes:
-staged contracts, logs and wheels.
-
-Contracts live in [`contracts/`](contracts/); Databricks deployment
-and execution code lives in [`platform/databricks/`](platform/databricks/). Domain and system
-configuration keeps ownership and shared expectations close to the teams responsible
-for the data. Defaults reduce repeated configuration; declared dependencies support
-data product lineage and execution order.
-
-Databricks provides compute, storage, access control and job orchestration.
-LakeLogic applies the contract-driven processing and checks.
-
-## Power BI consumers
-
-[`platform/reports/`](platform/reports/) holds two semantic models and ten reports, in Power BI project format.
-They read the gold tables through the Databricks connector in DirectQuery mode.
-
-| Semantic model | Gold tables | Reports |
-| --- | --- | --- |
-| `sm_rideflow_gold` | 21 | `rpt_rideflow_executive` (one page per fact, aggregate or mart), plus driver performance, payment reconciliation, rider engagement, support quality and trip operations |
-| `sm_rideflow_marketing` | 7 | acquisition cost, campaign ROI, channel spend and revenue by city |
-
-Each gold contract's `downstream:` block names the models that hold it and, under each
-model, the reports that read it. That is what a lineage view draws: gold table, semantic
-model, report. `python platform/scripts/validate_release.py` fails if a contract names a model or
-report that is not in `platform/reports/`, or a report reads a table its model does not hold.
-
-To open a model in Power BI Desktop, open its folder and set three parameters:
-`DatabricksHost`, `DatabricksHttpPath` (a SQL warehouse) and `DatabricksCatalogPrefix`. The
-models hold placeholders for the first two. The prefix defaults to `rideflow_dev`: each table
-is read from `<prefix>_<domain>.gold`, so set it to the `domain_catalog_prefix` of the
-environment you built. The models read tables the gold jobs have already built.
-
-## Inspect the evidence
-
-A successful pipeline run is only part of the picture. Review each control's
-results separately:
-
-| Control | Evidence to inspect |
-| --- | --- |
-| Data quality | Rejected records in the domain's `quarantine` schema, failed-rule context, and run results in `lakelogic._lakelogic_run_log` |
-| Service levels | SLO evaluation results against declared objectives |
-| Retention | Observations in `lakelogic._lakelogic_retention_evidence`, in the domain's catalog; checks do not delete data |
-| Erasure requests | Request statuses and `lakelogic._lakelogic_erasure_evidence`, in the domain's catalog; distinguish dry runs from execution |
-
-These controls cover the configured lakehouse scope. An erasure result is not
-proof of deletion from upstream systems, backups or every downstream copy.
-See the [erasure request guide](docs/erasure-requests.md) before running privacy jobs.
-
-## Test and explore
-
-For local static checks, run from the repository root with the validator's Python
-dependencies installed:
+**Run independently or connect to LakeLogic Platform.** The pipelines can run without a LakeLogic Platform connection. Inspect pipeline run metadata and quality results in the LakeLogic tables within your Databricks lakehouse. If you have a LakeLogic Platform workspace, configure the telemetry endpoint and required credentials to also send run metadata to the platform for monitoring and investigation. To run independently, clear the checked-in telemetry endpoint and check secret-based overrides so no reporting destination remains configured.
 
 ```bash
-python platform/scripts/validate_release.py
+cd platform/databricks
+./deploy.sh dev
 ```
 
-Read the output for skipped checks. Static validation is not a Databricks runtime
-test; the bootstrap smoke test and output inspection provide separate evidence.
+Windows PowerShell:
 
-To run another source system after deployment:
-
-```bash
-# From platform/databricks/
-databricks bundle run payments_stripe -t dev -p rideflow_dev
+```powershell
+Set-Location platform/databricks
+.\deploy.ps1 -Target dev
 ```
 
-| Next step | Guide |
-| --- | --- |
-| Explore domains, lineage, SCD Type 2 and repository layout | [Architecture and reference](docs/architecture-reference.md) |
-| Set up without the CLI | [Notebook setup](docs/no-cli-setup.md) |
-| Run each stage separately | [Manual run](docs/manual-run.md) |
-| Change catalog or permissions | [Catalog configuration](docs/catalog-configuration.md) |
-| Resolve deployment or cleanup issues | [Troubleshooting](docs/troubleshooting.md) |
+Then run **`pl_data_00_mesh_orchestrator`** in Databricks Workflows.
 
-## Boundaries and safety
+![The mesh orchestrator run: every system's job succeeded, in dependency order](docs/images/databricks_mesh_orchestrator_run_graph.png)
 
-This is a synthetic-data reference, not production acceptance evidence. Review
-permissions, rules, dependencies and package versions before adapting it.
-The default configuration installs the latest public LakeLogic release; pin
-`lakelogic_version` for repeatable environments.
+*RideFlow reference project · synthetic data. The orchestrator runs each system's job in dependency order: Business and Reference first, then the systems that read them.*
 
-Retention reporting does not delete data. Erasure tooling needs separate review
-and authorisation; privacy metadata alone does not establish regulatory compliance.
+**See each system's lineage.** Every pipeline run renders its DAG in the notebook with `pipeline.visualize_dag()`: source, Bronze, Silver and Gold, with personal-data counts per table. Dependencies come from each contract's `source` and `links`, so tables in the same layer run in order (Salesforce facts after the dimensions they look up).
 
-The LakeLogic platform is optional and separate from this demo. If enabling its
-telemetry integration, review the transmitted fields and store credentials in a
-Databricks secret scope—never in contracts or notebooks.
+<details>
+<summary>Lineage of the Salesforce system</summary>
 
-### Clean up
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/databricks_pipeline_dag_dark.png">
+  <img alt="LakeLogic pipeline DAG for business / salesforce in a Databricks job run: a landing source feeds five Bronze and five Silver tables, which feed Gold dimensions and then the facts that read them" src="docs/images/databricks_pipeline_dag_light.png">
+</picture>
 
-**Destructive:** the catalog commands delete each catalog and its schemas, tables,
-Volumes and data. Verify the names and remove only resources belonging to this demo.
+*RideFlow reference project · synthetic data. The Salesforce silver run in Databricks, with the lineage cell fitted to width.*
 
-```bash
-# From platform/databricks/; replace the catalog names if you changed them.
-databricks bundle destroy -t dev -p rideflow_dev
-for domain in marketing marketplace operations payments reference shared; do
-  databricks catalogs delete "rideflow_dev_${domain}" --force -p rideflow_dev
-done
-databricks catalogs delete rideflow_dev_platform --force -p rideflow_dev
-```
+</details>
 
-The bundle manages jobs and synced files; catalogs are created at runtime and
-require separate cleanup.
+**Test without live sources.** Generate synthetic inputs from Bronze contracts to test pipelines and quality checks.
 
-## Build your own
+**Run the mesh in order.** Included workflows coordinate systems and their Bronze, Silver and Gold stages using declared dependencies. Run the whole mesh or a single system; Shared Gold products follow their upstream systems.
 
-Start by adapting one contract and testing it against your data.
+**Check parameters before running or rerunning:** demo pipelines can reset selected layers, and some products overwrite their outputs. Checkpoints and seed settings also affect reruns. Do not run reset-oriented jobs against production tables.
 
-[LakeLogic documentation](https://lakelogic.github.io/LakeLogic/) ·
-[Python package](https://pypi.org/project/lakelogic/) ·
-[Apache 2.0 licence](LICENSE)
+[Manual walkthrough](docs/manual-run.md) | [Setup without the CLI](docs/no-cli-setup.md) | [Troubleshooting](docs/troubleshooting.md)
+
+## Follow one data product
+
+**How do trip demand, completion and revenue vary by city and day?**
+
+Follow Marketplace requests and completed trips, join Payments charges, and inspect the Shared marketplace-health mart. Its grain is one row per `(kpi_date, city_code)`.
+
+The [guided walkthrough](docs/data-product-walkthrough.md) links the actual contracts, explains the measure definitions, provides a SQL query and shows how to review a quality-rule change. Inspect accepted and rejected rows alongside run status, not just whether the job finished.
+
+## Evidence and limitations
+
+![Quarantine example](docs/images/databricks_quarantine_table.png)
+
+*RideFlow reference project · synthetic data. Rows held in `quarantine_silver_rideflow_driver_profiles`, each with the rule it broke and its category. Use your deployment's tables and logs to verify the revision you run.*
+
+- Configured row failures may enter quarantine; dataset gates and execution errors can stop a run.
+- Contract definitions and CI checks are distinct from successful Databricks execution. Use dated runs and output checks for the exact revision deployed.
+- Synthetic tests do not establish production performance, security or business correctness. Retention and erasure jobs do not establish end-to-end GDPR compliance.
+- Review permissions, realistic SLOs, recovery and operating costs before production use.
+
+[Controls and verification details](docs/data-product-walkthrough.md#inspect-controls-and-evidence) | [Erasure workflow](docs/erasure-requests.md)
+
+## Explore further
+
+[Contract specification](https://github.com/LakeLogic/open-lakehouse-contract) | [LakeLogic Core runtime](https://github.com/LakeLogic/LakeLogic) | [Architecture reference](docs/architecture-reference.md)
+
+Generation identifiers below record the original Studio export; subsequent edits are not independently attested by the hash.
+
+<sub>Generated by LakeLogic Lakehouse Studio · revision chv1:2363087383756d2867a21c9f1cf6b32fb0a38381dc34251cc866a0f28a067fb9 · governance seal sha256:f73b1d4ee46b840f739932844b48ac4c237a543305f8673f2258a48d95d17a7c · source snap-8db66a0e80c042cd</sub>

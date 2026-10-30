@@ -1,0 +1,22 @@
+{
+  "_note": "Generated from the project's deployment target in LakeLogic Deliver. Secrets are referenced by name only.",
+  "environments": {
+    "dev": {
+      "catalog_layout": "per_domain",
+      "compute": "serverless",
+      "container": "rideflow_dev",
+      "engine_version": "1.85.1",
+      "engine_wheel": null,
+      "landing_root": "/Volumes/rideflow_dev_{domain}/files/landing/{system}",
+      "log_root": "/Volumes/rideflow_dev_{domain}/files/lakelogic_logs",
+      "project_root": "/Workspace/Shared/lakelogic-rideflow-databricks-governed-lakehouse/dev",
+      "secret_name": null,
+      "secret_scope": null
+    }
+  },
+  "platform": "databricks",
+  "unset_environments": [
+    "staging",
+    "prod"
+  ]
+}

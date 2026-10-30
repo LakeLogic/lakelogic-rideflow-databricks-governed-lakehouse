@@ -1,0 +1,87 @@
+version: 1.0.0
+
+info:
+  title: Bronze — Salesforce Opportunities
+  target_layer: bronze
+  table_name: '{bronze_layer}_salesforce_opportunities'
+  domain: business
+  system: salesforce
+
+model:
+  fields:
+  - name: attributes
+    type: json
+    description: Observed json column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_opportunities.
+  - name: Id
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_opportunities.
+  - name: AccountId
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_opportunities.
+  - name: Name
+    type: string
+    pii: true
+    classification: person_name
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_opportunities. Personal data (person_name),
+      not masked.
+  - name: StageName
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_opportunities.
+  - name: Probability
+    type: Int64
+    description: Observed Int64 column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_opportunities.
+  - name: Amount
+    type: Float64
+    description: Observed Float64 column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_opportunities.
+  - name: CloseDate
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_opportunities.
+  - name: LeadSource
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_opportunities.
+  - name: OwnerId
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_opportunities.
+  - name: CreatedDate
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_opportunities.
+  - name: LastModifiedDate
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_opportunities.
+  - name: SystemModstamp
+    type: string
+    description: Observed string column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_opportunities.
+  - name: IsDeleted
+    type: boolean
+    description: Observed boolean column ingested from the scanned source salakelogicdemolanding
+      - landing.landing_business.salesforce_opportunities.
+
+source:
+  type: landing
+  path: '{landing_root}/opportunities'
+  format: json
+  partition:
+    format: y_%Y/m_%m/d_%d
+  load_mode: incremental
+  watermark_strategy: pipeline_log
+
+primary_key:
+- Id
+
+metadata:
+  run_log_table: '{domain_catalog}.lakelogic_run_log'
+
+dataset: bronze_salesforce_opportunities

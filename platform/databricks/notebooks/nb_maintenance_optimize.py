@@ -1,186 +1,225 @@
 # Databricks notebook source
-# ══════════════════════════════════════════════════════════════════════════════
-# Maintenance Driver — OPTIMIZE + VACUUM across all medallion layers
-# ══════════════════════════════════════════════════════════════════════════════
-# Walks the contract registry for one (domain, system), discovers every
-# Bronze/Silver/Gold Delta table it manages, then runs:
-#
-#   1. OPTIMIZE <table> [ZORDER BY (...)]   — coalesces small files,
-#                                              optionally clusters by hot cols
-#   2. VACUUM <table> RETAIN <hours>        — purges tombstoned files
-#
-# Designed to be scheduled weekly per domain. Doesn't touch contract logic,
-# doesn't move data, doesn't change schema — just reclaims storage and
-# improves read performance.
-#
-# Parameters
-# ──────────
-#   registry_path     — path to _system.yaml (same as other drivers)
-#   environment       — dev | stage | prod
-#   target_layers     — comma-separated subset of bronze,silver,gold (default: all)
-#   vacuum_retain_hrs — VACUUM retention (default: 168 = 7d, Delta minimum is 168)
-#   dry_run           — true → print SQL without executing
-#   zorder_columns    — JSON map per-table of ZORDER cols, e.g.
-#                       '{"silver_stripe_charges":["created_at","status"]}'
-#
 
-# ── LakeLogic source ──────────────────────────────────────────────────
-# Blank widget = install the published package from PyPI (what the demo does).
-# Set it to a wheel in the catalog's _wheels Volume to run an UNRELEASED build:
-#   platform/scripts/upload_lakelogic_wheel.sh   ->  prints the path to paste here
-# That is the only way to exercise a LakeLogic change on Databricks BEFORE it
-# is published, rather than discovering a bad release from the demo breaking.
-dbutils.widgets.text("lakelogic_wheel", "", "LakeLogic wheel (blank = PyPI)")
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC # maintenance_optimize - compact and clean up Delta tables (Databricks)
+# MAGIC
+# MAGIC OPTIMIZE runs every time. VACUUM runs only with <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">dry_run = "false"</span> and <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">confirm = "VACUUM"</span>.
+# MAGIC
+# MAGIC **What this notebook does**
+# MAGIC
+# MAGIC 1. Installs LakeLogic.
+# MAGIC 2. Reads the parameters.
+# MAGIC 3. Loads the system registry.
+# MAGIC 4. Runs OPTIMIZE on every table in the chosen layers, and VACUUM only when confirmed.
+# MAGIC
+# MAGIC **Parameters**
+# MAGIC
+# MAGIC | Widget | Meaning |
+# MAGIC |---|---|
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">catalog</span> | Unity Catalog this run reads and writes |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">contracts_root</span> | workspace folder holding <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">contracts/</span> |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">domain</span> / <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">system</span> | which <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">_system.yaml</span> registry to load |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">environment</span> | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">dev</span> \| <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">staging</span> \| <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">prod</span> |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">storage_mode</span> | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">catalog</span> \| <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">path</span> |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">target_layers</span> | layers to maintain |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">vacuum_retain_hrs</span> | VACUUM retention (minimum 168) |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">dry_run</span> / <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">confirm</span> | VACUUM needs <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">dry_run=false</span> and <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">confirm=VACUUM</span> |
+# MAGIC | <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">lakelogic_version</span> / <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">lakelogic_wheel</span> | install source (blank = latest from PyPI; a wheel wins) |
+# MAGIC
+# MAGIC Generated by LakeLogic Lakehouse Studio. Edit it here or in Studio; Studio's changes arrive as a pull request.
+# MAGIC generated by: LakeLogic Lakehouse Studio
+# MAGIC revision: chv1:2363087383756d2867a21c9f1cf6b32fb0a38381dc34251cc866a0f28a067fb9
+# MAGIC governance seal: sha256:f73b1d4ee46b840f739932844b48ac4c237a543305f8673f2258a48d95d17a7c
+# MAGIC source: estate snapshot snap-8db66a0e80c042cd
+# MAGIC
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 1. Install LakeLogic
+# MAGIC
+# MAGIC Databricks pre-installs the packages named in a <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">%pip</span> cell at session start, so a
+# MAGIC bare <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">lakelogic</span> can report "already satisfied" and silently keep an older build --
+# MAGIC the run then tests the wrong code while looking correct. <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">--upgrade</span> (or an explicit
+# MAGIC <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">==</span>) forces pip to act. <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">restartPython()</span> is required after any <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">%pip</span> install
+# MAGIC before the new version is importable.
+
+# COMMAND ----------
+
+# DBTITLE 1,Resolve install source
+# Declare the parameters (the job passes values for these).
 dbutils.widgets.text("lakelogic_version", "", "LakeLogic version (blank = latest)")
-_wheel = dbutils.widgets.get("lakelogic_wheel").strip()
-# --force-reinstall matters: Databricks pre-installs the packages named in
-# this cell into the notebook environment at session startup, so pip sees the
-# PUBLISHED lakelogic already present. An unreleased wheel carries the SAME
-# version number, so pip reports "already satisfied" and silently keeps the
-# released code - the run then tests the wrong build while looking correct.
+dbutils.widgets.text("lakelogic_wheel", "", "LakeLogic wheel (blank = PyPI)")
+# The extras the design needs: `documents` is added only when it reads PDFs, images or Word.
+dbutils.widgets.text("lakelogic_extras", "synthetic,pdf", "LakeLogic extras")
+
+# Read them.
 _version = dbutils.widgets.get("lakelogic_version").strip()
-# The PyPI branch needs the same protection the wheel branch already had.
-# Databricks PRE-INSTALLS the packages named in this cell at session start,
-# so a bare `lakelogic` is "already satisfied" by whatever version the
-# environment was built with — pip installs nothing and the run silently
-# executes the OLD code. That is exactly how a run on "1.51.0" reproduced a
-# bug fixed in 1.51.0: it was really running the pre-installed 1.50.0, and
-# the null `lakelogic_version` in its telemetry was the only tell.
-# An explicit `==` is unsatisfied by an older pre-install, so pip must act;
-# `--upgrade` covers the unpinned case.
+_wheel = dbutils.widgets.get("lakelogic_wheel").strip()
+_extras = dbutils.widgets.get("lakelogic_extras").strip() or "synthetic,pdf"
+# [synthetic] brings Faker for realistic values; [pdf] reads PDFs for document contracts.
+# A wheel wins over a version. `--force-reinstall` because Databricks pre-installs the
+# packages named in this cell at session start: without it a same-version wheel is
+# "already satisfied" and the run silently executes the PUBLISHED build instead.
 if _wheel:
-    lakelogic_pkg = f"{_wheel} --force-reinstall"
+    # The extras on the wheel path too: a bare wheel installs no extras, and the
+    # synthetic seed needs reportlab to write documents. pip accepts extras on a local
+    # file exactly as it does on a package name.
+    lakelogic_pkg = f"{_wheel}[{_extras}] --force-reinstall"
 elif _version:
-    lakelogic_pkg = f"lakelogic=={_version}"
+    lakelogic_pkg = f"lakelogic[{_extras}]=={_version}"
 else:
-    lakelogic_pkg = "lakelogic --upgrade"
+    lakelogic_pkg = f"lakelogic[{_extras}] --upgrade"
 print(f"Installing LakeLogic from: {lakelogic_pkg}")
 
 # COMMAND ----------
 
-# MAGIC # Only lakelogic is named: pyyaml/polars/deltalake are its own dependencies.
-# MAGIC # pyarrow<25: DBR ships 21.0.0, lakelogic needs >=23.0.1, databricks-connect caps <25.
+# DBTITLE 1,Install LakeLogic
+# MAGIC # pyarrow<25: DBR ships an older pyarrow than lakelogic needs, and
+# MAGIC # databricks-connect caps it below 25. pyyaml/polars/deltalake arrive as
+# MAGIC # lakelogic's own dependencies and are not named here.
 # MAGIC %pip install $lakelogic_pkg "pyarrow<25"
 
 # COMMAND ----------
 
+# DBTITLE 1,Restart Python
 dbutils.library.restartPython()
 
 # COMMAND ----------
 
-# Fail loudly if the engine is not the one asked for. A pinned `pip install lakelogic==X`
-# that cannot be satisfied (e.g. Databricks' PyPI index has not picked up a fresh release)
-# prints an ERROR and the notebook CARRIES ON with the pre-installed version - a run that
-# looks fine while executing old code (seen 2026-10-04: 1.69.0 requested, 1.68.0 ran).
-import lakelogic as _ll
-_want = (dbutils.widgets.get("lakelogic_version") or "").strip()
-if _want and _ll.__version__ != _want:
-    raise RuntimeError(
-        f"LakeLogic {_want} was requested but {_ll.__version__} is installed - the pip install "
-        "failed (see the install cell). Re-run once the release is on Databricks' PyPI index."
-    )
-print(f"LakeLogic {_ll.__version__}")
+# MAGIC %md
+# MAGIC ## 2. Parameters
+# MAGIC
+# MAGIC Widgets arrive as strings; a job run overrides them per run. One widget per line.
 
 # COMMAND ----------
 
-import json
-from pathlib import Path
+# DBTITLE 1,Parameters
+# Parameters - the pipeline overrides these per (domain, system). Widgets return STRINGS.
+# Declare the parameters (the job passes values for these).
+dbutils.widgets.text("catalog", "", "catalog")      # the Unity Catalog this run reads and writes
+dbutils.widgets.text("contracts_root", "", "contracts_root")
+dbutils.widgets.text("domain", "lakehouse", "domain")
+dbutils.widgets.text("system", "lakehouse", "system")
+dbutils.widgets.text("environment", "dev", "environment")                     # a key of _system.yaml environments
+dbutils.widgets.text("storage_mode", "catalog", "storage_mode")
+dbutils.widgets.text("target_layers", "bronze,silver,gold", "target_layers")
+dbutils.widgets.text("vacuum_retain_hrs", "168", "vacuum_retain_hrs")         # Delta refuses less than 168 hours unless reconfigured
+dbutils.widgets.text("dry_run", "true", "dry_run")                            # VACUUM runs only when dry_run is "false"...
+dbutils.widgets.text("confirm", "", "confirm")                                # ...AND confirm is exactly "VACUUM"
+dbutils.widgets.text("telemetry_endpoint", "", "telemetry_endpoint")          # LakeLogic run-log ingest URL. Empty = do not report.
+dbutils.widgets.text("telemetry_key", "", "telemetry_key")                    # LakeLogic API key. Supplied per run, never stored here.
+dbutils.widgets.text("telemetry_key_scope", "", "telemetry_key_scope")        # OR: the Databricks secret SCOPE holding the key
+dbutils.widgets.text("telemetry_key_secret", "", "telemetry_key_secret")      # OR: the secret NAME in that scope. Not a secret itself.
 
-dbutils.widgets.text("registry_path", "")
-dbutils.widgets.text("environment", "dev")
-dbutils.widgets.text("target_layers", "bronze,silver,gold")
-dbutils.widgets.text("vacuum_retain_hrs", "168")
-dbutils.widgets.text("dry_run", "false")
-dbutils.widgets.text("zorder_columns", "{}")
-
-registry_path = dbutils.widgets.get("registry_path")
+# Read them.
+catalog = dbutils.widgets.get("catalog")
+contracts_root = dbutils.widgets.get("contracts_root")
+domain = dbutils.widgets.get("domain")
+system = dbutils.widgets.get("system")
 environment = dbutils.widgets.get("environment")
-target_layers = [s.strip() for s in dbutils.widgets.get("target_layers").split(",") if s.strip()]
-vacuum_retain_hrs = int(dbutils.widgets.get("vacuum_retain_hrs"))
-dry_run = dbutils.widgets.get("dry_run").lower() == "true"
-zorder_map = json.loads(dbutils.widgets.get("zorder_columns") or "{}")
-
-assert registry_path, "registry_path is required"
-print(f"📋 Registry: {registry_path}")
-print(f"📋 Env: {environment} · Layers: {target_layers} · Retain: {vacuum_retain_hrs}h · Dry-run: {dry_run}")
+storage_mode = dbutils.widgets.get("storage_mode")
+target_layers = dbutils.widgets.get("target_layers")
+vacuum_retain_hrs = dbutils.widgets.get("vacuum_retain_hrs")
+dry_run = dbutils.widgets.get("dry_run")
+confirm = dbutils.widgets.get("confirm")
+telemetry_endpoint = dbutils.widgets.get("telemetry_endpoint")
+telemetry_key = dbutils.widgets.get("telemetry_key")
+telemetry_key_scope = dbutils.widgets.get("telemetry_key_scope")
+telemetry_key_secret = dbutils.widgets.get("telemetry_key_secret")
 
 # COMMAND ----------
 
-# Discover tables via the LakeLogic DomainRegistry so we always reflect the
-# current contracts. No hardcoded table lists — anything added to the registry
-# gets picked up next maintenance run for free.
+# MAGIC %md
+# MAGIC ## 3. Load the registry
+# MAGIC
+# MAGIC Resolves <span style="background:#7f1d1d;color:#ffffff;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.9em">{contracts_root}/{domain}/{system}/_system.yaml</span> and the helpers that map each contract to its physical table.
+
+# COMMAND ----------
+
+# DBTITLE 1,Load registry
+import os, json, hashlib, datetime, traceback, uuid
+
+os.environ[f"DATABRICKS_{environment.upper()}_CATALOG"] = catalog
+REGISTRY_PATH = f"{contracts_root}/{domain}/{system}/_system.yaml"
+print(f"Registry: {REGISTRY_PATH}  (env: {environment})")
+
 from lakelogic.core.registry import DomainRegistry
 
-registry = DomainRegistry.from_yaml(registry_path, environment=environment, storage_mode="uc")
+registry = DomainRegistry.from_yaml(REGISTRY_PATH, environment=environment, storage_mode=storage_mode)
+RUN_ID = str(uuid.uuid4())
 
-discovered = []  # list of (layer, fully_qualified_table)
-for contract in registry.contracts:
-    layer = (getattr(contract, "info", None) and getattr(contract.info, "target_layer", None)) or "?"
-    if layer not in target_layers:
-        continue
-    # Materialization path is the catalog-qualified table name for UC mode
-    mat = getattr(contract, "materialization", None)
-    target = getattr(mat, "target", None) if mat else None
-    if not target:
-        info_tbl = getattr(contract.info, "table_name", None) if getattr(contract, "info", None) else None
-        target = info_tbl
-    if not target:
-        print(f"  ⚠ skip {contract.info.title if contract.info else '?'} — no target table")
-        continue
-    discovered.append((layer, target))
+if "spark" not in dir():
+    raise RuntimeError("No Spark session - run this notebook attached to the lakehouse.")
 
-print(f"📋 Discovered {len(discovered)} tables to maintain")
-for layer, tbl in discovered:
-    print(f"   [{layer:6s}] {tbl}")
 
-# COMMAND ----------
+def table_of(contract):
+    """The physical table a contract writes, resolved as SLOValidator resolves it: the
+    contract's own info.table_name under the layer root, else under the domain catalog."""
+    info = (contract.contract_dict or {}).get("info") or {}
+    table = str(info.get("table_name") or "").strip()
+    if not table:
+        return None
+    base = getattr(registry.storage, f"{contract.layer}_root", None) or getattr(
+        registry.storage, "domain_catalog", None
+    )
+    return f"{base}.{table}".replace("`", "") if base else None
 
-# Run OPTIMIZE then VACUUM per table. Failures on one table don't abort the run
-# — we want maintenance to make as much progress as possible per window.
-results = {"optimized": [], "vacuumed": [], "failed": []}
 
-for layer, table in discovered:
-    print(f"\n── {table} ─────────────────────────────────────────────")
-
-    # OPTIMIZE (+ ZORDER if configured)
-    zorder = zorder_map.get(table.split(".")[-1]) or zorder_map.get(table)
-    if zorder:
-        zorder_cols = ", ".join(zorder)
-        sql_optimize = f"OPTIMIZE {table} ZORDER BY ({zorder_cols})"
-    else:
-        sql_optimize = f"OPTIMIZE {table}"
-    print(f"  → {sql_optimize}")
-    if not dry_run:
-        try:
-            spark.sql(sql_optimize)
-            results["optimized"].append(table)
-        except Exception as e:
-            print(f"  ✗ OPTIMIZE failed: {e}")
-            results["failed"].append((table, "optimize", str(e)))
-            continue
-
-    # VACUUM (Delta min retention = 168h / 7 days unless config relaxes it)
-    sql_vacuum = f"VACUUM {table} RETAIN {vacuum_retain_hrs} HOURS"
-    print(f"  → {sql_vacuum}")
-    if not dry_run:
-        try:
-            spark.sql(sql_vacuum)
-            results["vacuumed"].append(table)
-        except Exception as e:
-            print(f"  ✗ VACUUM failed: {e}")
-            results["failed"].append((table, "vacuum", str(e)))
+def exists(table):
+    try:
+        return bool(spark.catalog.tableExists(table))  # noqa: F821 - Databricks injects spark
+    except Exception:
+        return False
 
 # COMMAND ----------
 
-print("\n══════════════════════════════════════════════════════════════")
-print(f"  Maintenance complete")
-print(f"  OPTIMIZE:  ok={len(results['optimized'])}")
-print(f"  VACUUM:    ok={len(results['vacuumed'])}")
-print(f"  Failed:    {len(results['failed'])}")
-for tbl, op, err in results["failed"]:
-    print(f"    {op:8s} {tbl}: {err[:100]}")
-print("══════════════════════════════════════════════════════════════")
+# MAGIC %md
+# MAGIC ## 4. Optimize and vacuum
+# MAGIC
+# MAGIC OPTIMIZE removes no data. VACUUM deletes old files and ends time travel to them.
 
-if results["failed"] and not dry_run:
-    # Fail the task so the on_failure email fires, but keep the partial wins.
-    raise RuntimeError(f"{len(results['failed'])} maintenance operations failed; see logs above")
+# COMMAND ----------
+
+# DBTITLE 1,Optimize and vacuum
+LAYERS = [l.strip().lower() for l in str(target_layers).split(",") if l.strip()]
+RETAIN = max(168, int(str(vacuum_retain_hrs).strip() or "168"))
+DRY_RUN = str(dry_run).strip().lower() != "false"
+CONFIRMED = str(confirm).strip() == "VACUUM"
+VACUUM = (not DRY_RUN) and CONFIRMED
+if not DRY_RUN and not CONFIRMED:
+    print('VACUUM NOT RUN: dry_run is "false" but confirm is not exactly "VACUUM".')
+
+# OPTIMIZE always runs and removes no data. VACUUM deletes old files and ends time travel to them.
+tables = sorted({
+    t for c in registry.get_active_contracts() if c.layer in LAYERS for t in [table_of(c)] if t
+})
+print(f"{len(tables)} table(s), layers={LAYERS}, VACUUM={'ON' if VACUUM else 'off'} (retain {RETAIN}h)")
+
+optimized, vacuumed, skipped, failed = [], [], [], []
+for t in tables:
+    if not exists(t):
+        skipped.append(t)
+        print(f"  - {t}: not created yet, skipped")
+        continue
+    try:
+        spark.sql(f"OPTIMIZE {t}")  # noqa: F821
+        optimized.append(t)
+    except Exception as exc:
+        failed.append((t, "OPTIMIZE", str(exc)[:300]))
+        continue
+    if VACUUM:
+        try:
+            spark.sql(f"VACUUM {t} RETAIN {RETAIN} HOURS")  # noqa: F821
+            vacuumed.append(t)
+        except Exception as exc:
+            failed.append((t, "VACUUM", str(exc)[:300]))
+    print(f"  + {t}: optimized{' and vacuumed' if t in vacuumed else ''}")
+
+print(f"OPTIMIZE ok={len(optimized)}  VACUUM ok={len(vacuumed)}  skipped={len(skipped)}  failed={len(failed)}")
+for t, op, err in failed:
+    print(f"  ! {op} {t}: {err}")
+if failed:
+    raise RuntimeError(f"{len(failed)} maintenance operation(s) failed")
