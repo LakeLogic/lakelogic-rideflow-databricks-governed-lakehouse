@@ -73,14 +73,13 @@ model:
 
 source:
   type: stream
-  path: trip_requests
+  path: '{landing_root}/trip_requests'
+  format: csv
   options:
-    kind: eventhubs
-    connection_string: env:EVENTHUBS_RIDEFLOW_CONNECTION_STRING
-    topic: trip_requests
-    starting_offsets: earliest
+    kind: files
     checkpoint: '{log_root}/_checkpoints/trip_requests'
     trigger: available_now
+    header: true
 
 primary_key:
 - request_id

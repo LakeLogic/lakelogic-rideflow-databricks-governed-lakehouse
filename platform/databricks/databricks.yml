@@ -18,8 +18,8 @@ variables:
       (from the deployment target).'
     default: rideflow_dev
   landing_storage_root:
-    description: External storage the landing Volumes read (<root>/landing_<domain>). Blank =
-      managed Volumes, which start empty.
+    description: Optional external storage for the landing Volumes (<root>/landing_<domain>). Blank
+      (default) = managed Volumes inside Databricks; the seed job writes the sample files into them.
     default: ''
   catalog_storage_root:
     description: Storage location for a catalog setup creates (MANAGED LOCATION <root>/<catalog>).
@@ -49,14 +49,6 @@ variables:
     description: Secret NAME in that scope holding the ingest URL, used when telemetry_endpoint
       is blank. Not a secret itself.
     default: ''
-  eventhubs_rideflow_connection_string_scope:
-    description: Secret scope holding eventhubs_rideflow_connection_string (a NAME;
-      the value is read at run time).
-    default: ''
-  eventhubs_rideflow_connection_string_key:
-    description: Secret key holding eventhubs_rideflow_connection_string (a NAME;
-      the value is read at run time).
-    default: ''
 
 workspace:
   root_path: /Workspace/Shared/lakelogic-rideflow-databricks-governed-lakehouse/dev
@@ -69,13 +61,10 @@ targets:
       # The metastore has no storage root, so a catalog setup creates needs a location. The six
       # domain catalogs live here (created 2026-10-27 with this root passed by hand, never saved,
       # so the next new catalog - rideflow_dev_shared - failed). Kept here so every run uses it.
-      landing_storage_root: abfss://landing@salakelogicdatastore.dfs.core.windows.net
       catalog_storage_root: abfss://unity-catalog-storage@dbstoragegjbcqqdws2r4o.dfs.core.windows.net/7405615991211788/catalogs
       lakelogic_version: 1.85.1
       lakelogic_wheel: ''
       telemetry_key_scope: ''
       telemetry_key_secret: ''
-      eventhubs_rideflow_connection_string_scope: rideflow
-      eventhubs_rideflow_connection_string_key: eventhubs-rideflow
     workspace:
       root_path: /Workspace/Shared/lakelogic-rideflow-databricks-governed-lakehouse/dev

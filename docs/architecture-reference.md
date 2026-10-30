@@ -4,10 +4,12 @@
 
 Detailed examples and repository layout for the RideFlow reference lakehouse.
 
+> Current inventory: 158 contracts across seven domains, including Business/Salesforce. There are 14 source-system trees plus the Shared registry. Some diagrams predate these additions; follow the README walkthrough and contract tree for the current scope.
+
 ## Reference estate
 
 ```text
-RideFlow · one Databricks lakehouse (Unity Catalog) · 6 domains · 11 source systems
+RideFlow · one Databricks lakehouse (Unity Catalog) · 7 domains · 14 source systems plus Shared
 Source-processing domains use the medallion pattern — Bronze (raw, all-string, schema-flexible) → Silver (typed, cleaned, transformed, validated) → Gold (products)
 │
 ├── Marketplace   (rideflow)                          ← shown expanded as the example
@@ -31,7 +33,7 @@ Source-processing domains use the medallion pattern — Bronze (raw, all-string,
 
 ![RideFlow governed data mesh architecture](images/rideflow_governed_data_mesh_architecture.png)
 
-*Six RideFlow domains publish governed data products through Unity Catalog. LakeLogic Core applies
+*Seven RideFlow domains publish governed data products through Unity Catalog. LakeLogic Core applies
 the shared contract controls and records quarantine and run evidence.*
 
 
@@ -41,8 +43,8 @@ Source-processing domains own Bronze, Silver, and Gold definitions. Shared produ
 settings can be inherited from `_domain.yaml` and `_system.yaml`; individual
 contracts keep dataset-specific rules beside the team that understands the data.
 
-The repository contains 66 contracts across Marketplace, Marketing, Payments,
-Operations, Reference, and Shared. The examples include CSV, JSON, unstructured
+The repository contains 158 contracts across Marketplace, Marketing, Payments,
+Operations, Business, Reference, and Shared. The examples include CSV, JSON, unstructured
 PDF input, external Python logic, cross-domain Gold products, row-level lineage
 tags, freshness and volume SLOs, and an engine-agnostic pipeline DAG.
 
@@ -99,7 +101,7 @@ One catalog per domain: rideflow_dev_<domain>
 ├── quarantine           Contract-failing rows
 └── lakelogic            Run log, SLO results, retention and erasure records
 
-Domains: marketplace, marketing, payments, operations,
+Domains: marketplace, marketing, payments, operations, business,
          reference (shared lookups and conformed dimensions),
          shared (cross-domain marts; gold only)
 ```

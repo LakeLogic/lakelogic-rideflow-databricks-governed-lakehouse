@@ -25,10 +25,10 @@ model:
       description: "Calendar date the charge settled (UTC)."
     - name: city_code
       type: string
-      description: "Joined from silver_rideflow_trips via charge.trip_id → trip.city_code."
+      description: "Joined from silver_rideflow_trip_completed via charge.trip_id → trip.city_code."
     - name: vehicle_type
       type: string
-      description: "Joined from silver_rideflow_trips."
+      description: "Joined from silver_rideflow_trip_completed."
     # ── Revenue facts ──
     - name: gross_revenue_amount
       type: float
@@ -81,7 +81,7 @@ transformations:
                pc.charge_id              AS charge_id,
                CAST(pc.amount AS double) AS amount
         FROM pay_charges pc
-        JOIN silver_rideflow_trips t ON pc.trip_id = t.trip_id
+        JOIN silver_rideflow_trip_completed t ON pc.trip_id = t.trip_id
         LEFT JOIN mp_drivers dv ON dv.driver_id = t.driver_id
       ),
       agg AS (
@@ -147,9 +147,9 @@ links:
   - name: pay_charges
     type: table
     path: "table:`{domain_catalog_prefix}_payments`.silver.silver_stripe_charges"
-  - name: silver_rideflow_trips
+  - name: silver_rideflow_trip_completed
     type: table
-    path: "table:`{domain_catalog_prefix}_marketplace`.silver.silver_rideflow_trips"
+    path: "table:`{domain_catalog_prefix}_marketplace`.silver.silver_rideflow_trip_completed"
   - name: mp_drivers
     type: table
     path: "table:`{domain_catalog_prefix}_marketplace`.silver.silver_rideflow_driver_profiles"
