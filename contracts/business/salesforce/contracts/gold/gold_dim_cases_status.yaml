@@ -18,7 +18,7 @@ model:
   - name: Status
     type: string
     required: true
-    description: Dimension attribute 'Status', projected from the 'cases_status' entity.
+    description: Status of the case or contract.
   - name: system
     type: string
     required: true

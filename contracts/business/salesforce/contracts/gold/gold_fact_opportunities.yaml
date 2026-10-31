@@ -13,23 +13,23 @@ model:
   - name: Id
     type: string
     required: true
-    description: Grain key of the 'opportunities' fact.
+    description: Salesforce record ID; unique per record.
   - name: opportunity_amount
     type: decimal(18,2)
     required: false
-    description: Column 'opportunity_amount' of the 'opportunities' fact.
+    description: Opportunity value.
   - name: win_probability
     type: float
     required: false
-    description: Column 'win_probability' of the 'opportunities' fact.
+    description: Likelihood of winning the opportunity.
   - name: CloseDate
     type: date
     required: false
-    description: Column 'CloseDate' of the 'opportunities' fact.
+    description: Expected or actual close date of the opportunity.
   - name: CreatedDate
     type: timestamp
     required: false
-    description: Column 'CreatedDate' of the 'opportunities' fact.
+    description: When the record was created in Salesforce.
   - name: account_sk
     type: string
     required: true

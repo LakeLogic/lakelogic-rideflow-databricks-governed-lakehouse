@@ -13,7 +13,7 @@ model:
   - name: activity_date
     type: date
     required: true
-    description: Grain key of the 'campaigns_daily' fact.
+    description: Calendar day the row summarises.
   - name: impressions
     type: integer
     required: false

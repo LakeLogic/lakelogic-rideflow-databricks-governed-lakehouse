@@ -1,6 +1,8 @@
 version: 1.0.0
 
 info:
+  data_product: rider_and_driver_profiles
+  data_product_output: dim_rider
   title: Gold — Dim Rider Profiles (SCD2)
   target_layer: gold
   description: Rider profile history from the Rideflow marketplace, holding one record

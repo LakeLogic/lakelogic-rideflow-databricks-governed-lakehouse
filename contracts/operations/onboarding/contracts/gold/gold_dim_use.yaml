@@ -18,7 +18,7 @@ model:
   - name: use
     type: string
     required: true
-    description: Dimension attribute 'use', projected from the 'use' entity.
+    description: Permitted use of the insured vehicle, as stated on the certificate.
   - name: system
     type: string
     required: true

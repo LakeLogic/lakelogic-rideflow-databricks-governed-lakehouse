@@ -11,60 +11,47 @@ model:
   fields:
   - name: attributes
     type: json
-    description: Observed json column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_contacts.
+    description: Salesforce API metadata for the record (object type and URL).
   - name: Id
     type: string
-    description: Observed string column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_contacts.
+    description: Salesforce record ID; unique per record.
   - name: AccountId
     type: string
-    description: Observed string column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_contacts.
+    description: Salesforce account the record belongs to.
   - name: FirstName
     type: string
-    description: Observed string column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_contacts.
+    description: Contact's first name.
   - name: LastName
     type: string
-    description: Observed string column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_contacts.
+    description: Contact's last name.
   - name: Email
     type: string
     pii: true
     classification: email
-    description: Observed string column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_contacts. Personal data (email), not masked.
+    description: Contact's email address.
   - name: Title
     type: string
-    description: Observed string column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_contacts.
+    description: Contact's job title.
   - name: Phone
     type: string
     pii: true
     classification: phone
-    description: Observed string column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_contacts. Personal data (phone), not masked.
+    description: Contact's phone number.
   - name: MailingCity
     type: string
-    description: Observed string column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_contacts.
+    description: City of the contact's mailing address.
   - name: CreatedDate
     type: string
-    description: Observed string column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_contacts.
+    description: When the record was created in Salesforce.
   - name: LastModifiedDate
     type: string
-    description: Observed string column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_contacts.
+    description: When a user last changed the record in Salesforce.
   - name: SystemModstamp
     type: string
-    description: Observed string column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_contacts.
+    description: When the record was last changed by a user or by Salesforce itself.
   - name: IsDeleted
     type: boolean
-    description: Observed boolean column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_contacts.
+    description: Whether the record is in the Salesforce recycle bin.
 
 source:
   type: landing

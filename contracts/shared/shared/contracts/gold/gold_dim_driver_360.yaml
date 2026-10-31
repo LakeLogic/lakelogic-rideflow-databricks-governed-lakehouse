@@ -20,31 +20,39 @@ model:
     # ── From marketplace driver_profiles (primary source) ────────────────
     - name: driver_id
       type: string
+      description: RideFlow driver the record belongs to.
       required: true
     - name: full_name
       type: string
+      description: Driver's full name.
       pii: true
     - name: email
       type: string
+      description: Driver's email address.
       pii: true
     - name: city_code
       type: string
+      description: RideFlow city code.
     - name: status
       type: string
+      description: Driver's account status.
     - name: rating
       type: float
+      description: Driver's average rating.
     # ── Joined from operations.checkr ────────────────────────────────────
     - name: verification_status
       type: string
       description: "checkr report status (clear / consider / suspended)"
     - name: verification_completed_at
       type: timestamp
+      description: When the driver's latest background check completed.
     # ── Joined from payments.stripe ──────────────────────────────────────
     - name: lifetime_payout_amount
       type: float
       description: "Sum of stripe_payouts.amount for this driver"
     - name: last_payout_date
       type: string
+      description: Date of the driver's most recent payout.
     - name: system
       type: string
       required: true

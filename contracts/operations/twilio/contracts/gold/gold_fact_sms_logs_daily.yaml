@@ -28,7 +28,7 @@ model:
   - name: message_count
     type: integer
     required: false
-    description: Column 'message_count' of the 'sms_logs_daily' fact.
+    description: Number of SMS messages in the row.
   - name: date_key
     type: integer
     required: false

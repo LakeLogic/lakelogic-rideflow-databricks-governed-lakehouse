@@ -18,28 +18,27 @@ model:
   - name: Id
     type: string
     required: true
-    description: Dimension attribute 'Id', projected from the 'contacts' entity.
+    description: Salesforce record ID; unique per record.
   - name: AccountId
     type: string
     required: false
-    description: Dimension attribute 'AccountId', projected from the 'contacts' entity.
+    description: Salesforce account the record belongs to.
   - name: FirstName
     type: string
     required: false
-    description: Dimension attribute 'FirstName', projected from the 'contacts' entity.
+    description: Contact's first name.
   - name: LastName
     type: string
     required: false
-    description: Dimension attribute 'LastName', projected from the 'contacts' entity.
+    description: Contact's last name.
   - name: Title
     type: string
     required: false
-    description: Dimension attribute 'Title', projected from the 'contacts' entity.
+    description: Contact's job title.
   - name: MailingCity
     type: string
     required: false
-    description: Dimension attribute 'MailingCity', projected from the 'contacts'
-      entity.
+    description: City of the contact's mailing address.
   - name: effective_from
     type: timestamp
     required: false

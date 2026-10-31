@@ -164,9 +164,6 @@ products:
     - id: fact_trip_daily_kpis
       name: Trip Daily KPIs
       kind: table
-    - id: fact_rider_daily_metrics
-      name: Rider Daily Metrics
-      kind: table
   - id: rider_and_driver_profiles
     name: Rider and Driver Profiles
     description: Current and historical rider and driver profiles, and driver performance.
@@ -177,9 +174,6 @@ products:
       kind: table
     - id: dim_driver
       name: Driver
-      kind: table
-    - id: dim_driver_scorecard
-      name: Driver Scorecard
       kind: table
   - id: surge_pricing
     name: Surge Pricing

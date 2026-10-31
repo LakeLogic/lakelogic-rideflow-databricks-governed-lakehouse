@@ -13,7 +13,7 @@ model:
   - name: incident_id
     type: string
     required: true
-    description: Grain key of the 'incident_reports' fact.
+    description: ID of the incident report.
   - name: estimated_cost
     type: double
     required: false
@@ -21,23 +21,23 @@ model:
   - name: trip_id
     type: string
     required: false
-    description: Column 'trip_id' of the 'incident_reports' fact.
+    description: Trip the incident relates to.
   - name: incident_datetime
     type: timestamp
     required: false
-    description: Column 'incident_datetime' of the 'incident_reports' fact.
+    description: When the incident happened.
   - name: location
     type: string
     required: false
-    description: Column 'location' of the 'incident_reports' fact.
+    description: Where the incident happened, as reported.
   - name: reported_by
     type: string
     required: false
-    description: Column 'reported_by' of the 'incident_reports' fact.
+    description: Who reported the incident.
   - name: what_happened
     type: string
     required: false
-    description: Column 'what_happened' of the 'incident_reports' fact.
+    description: Free-text account of the incident from the report.
   - name: driver_sk
     type: string
     required: true

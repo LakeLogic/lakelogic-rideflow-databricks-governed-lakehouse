@@ -1,6 +1,8 @@
 version: 1.0.0
 
 info:
+  data_product: fx_rates
+  data_product_output: fact_fx_rate_daily
   title: Gold — Fact Fx Rates Daily
   target_layer: gold
   description: Daily exchange rates for currency pairs, each tied to the calendar

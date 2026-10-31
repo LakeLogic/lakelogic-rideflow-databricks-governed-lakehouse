@@ -1,6 +1,8 @@
 version: 1.0.0
 
 info:
+  data_product: reference_data
+  data_product_output: dim_city
   title: Gold — Dim City Master (SCD2)
   target_layer: gold
   description: A versioned reference list of cities, each tied to a country code and

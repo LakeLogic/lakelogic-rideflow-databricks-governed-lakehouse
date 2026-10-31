@@ -11,63 +11,48 @@ model:
   fields:
   - name: attributes
     type: json
-    description: Observed json column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_opportunities.
+    description: Salesforce API metadata for the record (object type and URL).
   - name: Id
     type: string
-    description: Observed string column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_opportunities.
+    description: Salesforce record ID; unique per record.
   - name: AccountId
     type: string
-    description: Observed string column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_opportunities.
+    description: Salesforce account the record belongs to.
   - name: Name
     type: string
     pii: true
     classification: person_name
-    description: Observed string column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_opportunities. Personal data (person_name),
-      not masked.
+    description: Name of the account or opportunity.
   - name: StageName
     type: string
-    description: Observed string column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_opportunities.
+    description: Sales stage of the opportunity.
   - name: Probability
     type: Int64
-    description: Observed Int64 column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_opportunities.
+    description: Likelihood of winning the opportunity, in percent.
   - name: Amount
     type: Float64
-    description: Observed Float64 column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_opportunities.
+    description: Opportunity value.
   - name: CloseDate
     type: string
-    description: Observed string column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_opportunities.
+    description: Expected or actual close date of the opportunity.
   - name: LeadSource
     type: string
-    description: Observed string column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_opportunities.
+    description: Where the opportunity's lead came from.
   - name: OwnerId
     type: string
-    description: Observed string column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_opportunities.
+    description: Salesforce user who owns the record.
   - name: CreatedDate
     type: string
-    description: Observed string column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_opportunities.
+    description: When the record was created in Salesforce.
   - name: LastModifiedDate
     type: string
-    description: Observed string column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_opportunities.
+    description: When a user last changed the record in Salesforce.
   - name: SystemModstamp
     type: string
-    description: Observed string column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_opportunities.
+    description: When the record was last changed by a user or by Salesforce itself.
   - name: IsDeleted
     type: boolean
-    description: Observed boolean column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_opportunities.
+    description: Whether the record is in the Salesforce recycle bin.
 
 source:
   type: landing

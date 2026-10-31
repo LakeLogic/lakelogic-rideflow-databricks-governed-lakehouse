@@ -22,6 +22,7 @@ model:
     # ── Dimensions ──
     - name: kpi_date
       type: date
+      description: Calendar day the measures are for.
       required: true
     - name: channel
       type: string
@@ -29,17 +30,21 @@ model:
       description: "google_ads | meta_ads | hubspot_email"
     - name: campaign_id
       type: string
+      description: Ad or email campaign ID in its source platform.
       required: true
     - name: campaign_name
       type: string
+      description: Name of the campaign.
     # ── Facts ──
     - name: spend_amount
       type: float
       description: "Channel ad spend in GBP for the day."
     - name: impressions
       type: integer
+      description: Impressions of the campaign that day.
     - name: clicks
       type: integer
+      description: Clicks on the campaign that day.
     - name: attributed_new_riders
       type: integer
       description: "Riders whose signup_date matches kpi_date AND whose acquisition_campaign_id matches."

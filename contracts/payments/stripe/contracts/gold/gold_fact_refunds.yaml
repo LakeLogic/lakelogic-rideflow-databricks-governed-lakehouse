@@ -24,7 +24,7 @@ model:
   - name: refunded_amount
     type: decimal(10,2)
     required: false
-    description: Column 'refunded_amount' of the 'refunds' fact.
+    description: Amount refunded.
   - name: charge_id
     type: string
     required: false

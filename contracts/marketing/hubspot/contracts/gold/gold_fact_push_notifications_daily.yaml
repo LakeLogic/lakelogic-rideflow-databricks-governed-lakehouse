@@ -13,11 +13,11 @@ model:
   - name: activity_date
     type: date
     required: true
-    description: Grain key of the 'push_notifications_daily' fact.
+    description: Calendar day the row summarises.
   - name: notification_count
     type: integer
     required: false
-    description: Column 'notification_count' of the 'push_notifications_daily' fact.
+    description: Number of push notifications in the row.
   - name: date_key
     type: integer
     required: false
