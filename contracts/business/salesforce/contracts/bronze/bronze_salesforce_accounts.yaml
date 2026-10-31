@@ -2,6 +2,7 @@ version: 1.0.0
 
 info:
   title: Bronze — Salesforce Accounts
+  description: Salesforce account records landed as delivered, one row per account per load.
   target_layer: bronze
   table_name: '{bronze_layer}_salesforce_accounts'
   domain: business
