@@ -18,8 +18,7 @@ model:
   - name: LeadSource
     type: string
     required: true
-    description: Dimension attribute 'LeadSource', projected from the 'lead_source'
-      entity.
+    description: Where the opportunity's lead came from.
   - name: system
     type: string
     required: true

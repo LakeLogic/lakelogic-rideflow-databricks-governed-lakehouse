@@ -13,35 +13,35 @@ model:
   - name: Id
     type: string
     required: true
-    description: Grain key of the 'contracts' fact.
+    description: Salesforce record ID; unique per record.
   - name: monthly_commit_amount
     type: Float64
     required: false
-    description: Column 'monthly_commit_amount' of the 'contracts' fact.
+    description: Monthly spend the business account has committed to.
   - name: ContractNumber
     type: string
     required: false
-    description: Column 'ContractNumber' of the 'contracts' fact.
+    description: Contract number shown to users in Salesforce.
   - name: Status
     type: string
     required: false
-    description: Column 'Status' of the 'contracts' fact.
+    description: Status of the case or contract.
   - name: StartDate
     type: date
     required: false
-    description: Column 'StartDate' of the 'contracts' fact.
+    description: Date the contract starts.
   - name: EndDate
     type: date
     required: false
-    description: Column 'EndDate' of the 'contracts' fact.
+    description: Date the contract ends.
   - name: ContractTerm
     type: Int64
     required: false
-    description: Column 'ContractTerm' of the 'contracts' fact.
+    description: Contract length in months.
   - name: CreatedDate
     type: timestamp
     required: false
-    description: Column 'CreatedDate' of the 'contracts' fact.
+    description: When the record was created in Salesforce.
   - name: account_sk
     type: string
     required: true

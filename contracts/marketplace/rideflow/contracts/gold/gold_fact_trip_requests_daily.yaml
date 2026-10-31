@@ -22,15 +22,15 @@ model:
   - name: estimated_fare_total
     type: decimal(10,2)
     required: false
-    description: Column 'estimated_fare_total' of the 'trip_requests_daily' fact.
+    description: Sum of the estimated fares quoted for the requests.
   - name: avg_estimated_eta_minutes
     type: float
     required: false
-    description: Column 'avg_estimated_eta_minutes' of the 'trip_requests_daily' fact.
+    description: Average estimated time to pickup, in minutes.
   - name: avg_surge_multiplier
     type: float
     required: false
-    description: Column 'avg_surge_multiplier' of the 'trip_requests_daily' fact.
+    description: Average surge multiplier applied to the requests.
   - name: date_key
     type: integer
     required: false

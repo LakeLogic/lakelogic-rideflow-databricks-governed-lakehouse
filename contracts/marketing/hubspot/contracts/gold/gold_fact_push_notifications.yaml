@@ -25,7 +25,7 @@ model:
   - name: notification_count
     type: integer
     required: false
-    description: Column 'notification_count' of the 'push_notifications' fact.
+    description: Number of push notifications in the row.
   - name: sent_at
     type: timestamp
     required: false

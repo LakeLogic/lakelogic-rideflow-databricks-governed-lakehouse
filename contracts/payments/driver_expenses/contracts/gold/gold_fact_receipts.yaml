@@ -13,11 +13,11 @@ model:
   - name: file_path
     type: string
     required: true
-    description: Grain key of the 'receipts' fact.
+    description: Path of the source document in the landing volume.
   - name: receipt_number
     type: string
     required: true
-    description: Grain key of the 'receipts' fact.
+    description: Receipt number printed by the merchant.
   - name: total_amount
     type: decimal(10,2)
     required: false
@@ -29,15 +29,15 @@ model:
   - name: receipt_time
     type: timestamp
     required: false
-    description: Column 'receipt_time' of the 'receipts' fact.
+    description: Date and time printed on the receipt.
   - name: merchant
     type: string
     required: false
-    description: Column 'merchant' of the 'receipts' fact.
+    description: Merchant named on the receipt.
   - name: service
     type: string
     required: false
-    description: Column 'service' of the 'receipts' fact.
+    description: Service the receipt is for.
   - name: driver_sk
     type: string
     required: true

@@ -13,27 +13,27 @@ model:
   - name: policy_reference
     type: string
     required: true
-    description: Grain key of the 'insurance_certificates' fact.
+    description: Insurer's policy reference.
   - name: driver_id
     type: string
     required: false
-    description: Column 'driver_id' of the 'insurance_certificates' fact.
+    description: RideFlow driver the record belongs to.
   - name: registration_mark
     type: string
     required: false
-    description: Column 'registration_mark' of the 'insurance_certificates' fact.
+    description: Registration mark of the insured vehicle.
   - name: cover_start
     type: timestamp
     required: false
-    description: Column 'cover_start' of the 'insurance_certificates' fact.
+    description: Start of the insurance cover.
   - name: cover_end
     type: timestamp
     required: false
-    description: Column 'cover_end' of the 'insurance_certificates' fact.
+    description: End of the insurance cover.
   - name: use
     type: string
     required: false
-    description: Column 'use' of the 'insurance_certificates' fact.
+    description: Permitted use of the insured vehicle, as stated on the certificate.
   - name: driver_sk
     type: string
     required: true

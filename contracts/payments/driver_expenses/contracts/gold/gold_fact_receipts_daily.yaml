@@ -13,7 +13,7 @@ model:
   - name: activity_date
     type: date
     required: true
-    description: Grain key of the 'receipts_daily' fact.
+    description: Calendar day the row summarises.
   - name: total_amount
     type: decimal(10,2)
     required: false

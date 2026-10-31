@@ -12,68 +12,55 @@ model:
   - name: attributes
     type: json
     required: false
-    description: Column 'attributes' projected from source table 'salesforce_contracts',
-      typed as json.
+    description: Salesforce API metadata for the record (object type and URL).
   - name: Id
     type: string
     required: true
-    description: Business key 'Id' (from source table 'salesforce_contracts'), typed
-      as string.
+    description: Salesforce record ID; unique per record.
   - name: AccountId
     type: string
     required: false
-    description: Column 'AccountId' projected from source table 'salesforce_contracts',
-      typed as string.
+    description: Salesforce account the record belongs to.
   - name: ContractNumber
     type: string
     required: false
-    description: Column 'ContractNumber' projected from source table 'salesforce_contracts',
-      typed as string.
+    description: Contract number shown to users in Salesforce.
   - name: Status
     type: string
     required: true
-    description: Column 'Status' projected from source table 'salesforce_contracts',
-      typed as string.
+    description: Status of the case or contract.
   - name: StartDate
     type: date
     required: false
-    description: Column 'StartDate' projected from source table 'salesforce_contracts',
-      typed as date.
+    description: Date the contract starts.
   - name: ContractTerm
     type: Int64
     required: false
-    description: Column 'ContractTerm' projected from source table 'salesforce_contracts',
-      typed as Int64.
+    description: Contract length in months.
   - name: EndDate
     type: date
     required: false
-    description: Column 'EndDate' projected from source table 'salesforce_contracts',
-      typed as date.
+    description: Date the contract ends.
   - name: RideFlow_Monthly_Commit__c
     type: Float64
     required: false
-    description: Column 'RideFlow_Monthly_Commit__c' projected from source table 'salesforce_contracts',
-      typed as Float64.
+    description: Monthly spend the business account has committed to (custom field).
   - name: CreatedDate
     type: timestamp
     required: false
-    description: Column 'CreatedDate' projected from source table 'salesforce_contracts',
-      typed as timestamp.
+    description: When the record was created in Salesforce.
   - name: LastModifiedDate
     type: timestamp
     required: false
-    description: Column 'LastModifiedDate' projected from source table 'salesforce_contracts',
-      typed as timestamp.
+    description: When a user last changed the record in Salesforce.
   - name: SystemModstamp
     type: timestamp
     required: false
-    description: Column 'SystemModstamp' projected from source table 'salesforce_contracts',
-      typed as timestamp.
+    description: When the record was last changed by a user or by Salesforce itself.
   - name: IsDeleted
     type: boolean
     required: false
-    description: Column 'IsDeleted' projected from source table 'salesforce_contracts',
-      typed as boolean.
+    description: Whether the record is in the Salesforce recycle bin.
 
 primary_key:
 - Id

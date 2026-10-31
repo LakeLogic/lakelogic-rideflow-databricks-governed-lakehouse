@@ -18,40 +18,33 @@ model:
   - name: driver_id
     type: string
     required: true
-    description: Dimension attribute 'driver_id', projected from the 'driving_licences'
-      entity.
+    description: RideFlow driver the record belongs to.
   - name: licence_no
     type: string
     required: true
     pii: true
     classification: licence_id
-    description: Dimension attribute 'licence_no', projected from the 'driving_licences'
-      entity. Personal data (licence_id), not masked.
+    description: Driving licence number as printed on the document.
   - name: holder_name
     type: string
     required: false
-    description: Dimension attribute 'holder_name', projected from the 'driving_licences'
-      entity.
+    description: Name of the licence holder as printed on the document.
   - name: expiry_date
     type: date
     required: false
-    description: Dimension attribute 'expiry_date', projected from the 'driving_licences'
-      entity.
+    description: Date the licence expires.
   - name: licence_class
     type: string
     required: false
-    description: Dimension attribute 'licence_class', projected from the 'driving_licences'
-      entity.
+    description: Vehicle class the licence covers.
   - name: issuing_city
     type: string
     required: false
-    description: Dimension attribute 'issuing_city', projected from the 'driving_licences'
-      entity.
+    description: City that issued the licence.
   - name: file_path
     type: string
     required: false
-    description: Dimension attribute 'file_path', projected from the 'driving_licences'
-      entity.
+    description: Path of the source document in the landing volume.
   - name: effective_from
     type: timestamp
     required: false

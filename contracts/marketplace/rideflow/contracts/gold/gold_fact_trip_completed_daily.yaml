@@ -1,6 +1,8 @@
 version: 1.0.0
 
 info:
+  data_product: trip_performance
+  data_product_output: fact_trip_daily_kpis
   title: Gold — Fact Trip Completed Daily
   target_layer: gold
   description: Daily totals of completed rides from the rideflow system, covering

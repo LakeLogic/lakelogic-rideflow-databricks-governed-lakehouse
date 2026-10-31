@@ -18,7 +18,7 @@ model:
   - name: Origin
     type: string
     required: true
-    description: Dimension attribute 'Origin', projected from the 'origin' entity.
+    description: Channel the case came in through, such as email or phone.
   - name: system
     type: string
     required: true

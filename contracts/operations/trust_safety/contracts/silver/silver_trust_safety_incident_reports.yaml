@@ -12,53 +12,43 @@ model:
   - name: file_path
     type: string
     required: false
-    description: Column 'file_path' projected from source table 'trust_safety_incident_reports',
-      typed as string.
+    description: Path of the source document in the landing volume.
   - name: incident_id
     type: string
     required: true
-    description: Column 'incident_id' projected from source table 'trust_safety_incident_reports',
-      typed as string.
+    description: ID of the incident report.
   - name: trip_id
     type: string
     required: false
-    description: Column 'trip_id' projected from source table 'trust_safety_incident_reports',
-      typed as string.
+    description: Trip the incident relates to.
   - name: driver_id
     type: string
     required: false
-    description: Column 'driver_id' projected from source table 'trust_safety_incident_reports',
-      typed as string.
+    description: RideFlow driver the record belongs to.
   - name: incident_datetime
     type: timestamp
     required: false
-    description: Column 'incident_datetime' projected from source table 'trust_safety_incident_reports',
-      typed as timestamp.
+    description: When the incident happened.
   - name: location
     type: string
     required: false
-    description: Column 'location' projected from source table 'trust_safety_incident_reports',
-      typed as string.
+    description: Where the incident happened, as reported.
   - name: incident_type
     type: string
     required: false
-    description: Column 'incident_type' projected from source table 'trust_safety_incident_reports',
-      typed as string.
+    description: Type of incident reported.
   - name: estimated_cost
     type: double
     required: false
-    description: Column 'estimated_cost' projected from source table 'trust_safety_incident_reports',
-      typed as double.
+    description: Estimated cost of the incident, as reported.
   - name: reported_by
     type: string
     required: false
-    description: Column 'reported_by' projected from source table 'trust_safety_incident_reports',
-      typed as string.
+    description: Who reported the incident.
   - name: what_happened
     type: string
     required: false
-    description: Column 'what_happened' projected from source table 'trust_safety_incident_reports',
-      typed as string.
+    description: Free-text account of the incident from the report.
 
 materialization:
   strategy: overwrite

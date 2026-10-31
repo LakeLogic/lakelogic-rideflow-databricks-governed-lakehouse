@@ -18,37 +18,31 @@ model:
   - name: file_path
     type: string
     required: false
-    description: Column 'file_path' projected from source table 'checkr_driver_licences',
-      typed as string.
+    description: Path of the source document in the landing volume.
   - name: holder_name
     type: string
     required: false
-    description: Column 'holder_name' projected from source table 'checkr_driver_licences',
-      typed as string.
+    description: Name of the licence holder as printed on the document.
   - name: licence_number
     type: string
     required: false
     pii: true
     classification: licence_id
-    description: Column 'licence_number' projected from source table 'checkr_driver_licences',
-      typed as string. Personal data (licence_id), not masked.
+    description: Driving licence number as printed on the document.
   - name: date_of_birth
     type: date
     required: false
     pii: true
     classification: date_of_birth
-    description: Column 'date_of_birth' projected from source table 'checkr_driver_licences',
-      typed as date. Personal data (date_of_birth), not masked.
+    description: Holder's date of birth as printed on the document.
   - name: expiry_date
     type: date
     required: false
-    description: Column 'expiry_date' projected from source table 'checkr_driver_licences',
-      typed as date.
+    description: Date the licence expires.
   - name: vehicle_classes
     type: string
     required: false
-    description: Column 'vehicle_classes' projected from source table 'checkr_driver_licences',
-      typed as string.
+    description: Vehicle classes the licence covers.
 
 materialization:
   strategy: overwrite

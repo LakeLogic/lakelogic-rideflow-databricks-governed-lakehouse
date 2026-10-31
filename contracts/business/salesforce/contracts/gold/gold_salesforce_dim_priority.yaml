@@ -18,7 +18,7 @@ model:
   - name: Priority
     type: string
     required: true
-    description: Dimension attribute 'Priority', projected from the 'priority' entity.
+    description: Case priority.
   - name: system
     type: string
     required: true

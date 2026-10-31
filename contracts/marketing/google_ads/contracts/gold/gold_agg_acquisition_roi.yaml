@@ -21,14 +21,19 @@ model:
       description: "Aggregation grain (kept as string to match silver type)"
     - name: total_cost
       type: float
+      description: Total ad spend.
     - name: total_impressions
       type: long
+      description: Total ad impressions.
     - name: total_clicks
       type: long
+      description: Total ad clicks.
     - name: total_conversions
       type: long
+      description: Total conversions attributed to the ads.
     - name: total_conversion_value
       type: float
+      description: Total value of the conversions attributed to the ads.
     - name: cac
       type: float
       description: "Cost per Acquisition = total_cost / total_conversions"

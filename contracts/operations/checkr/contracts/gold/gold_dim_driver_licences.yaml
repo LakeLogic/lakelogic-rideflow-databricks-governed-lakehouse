@@ -23,13 +23,11 @@ model:
   - name: file_path
     type: string
     required: true
-    description: Dimension attribute 'file_path', projected from the 'driver_licences'
-      entity.
+    description: Path of the source document in the landing volume.
   - name: holder_name
     type: string
     required: true
-    description: Dimension attribute 'holder_name', projected from the 'driver_licences'
-      entity.
+    description: Name of the licence holder as printed on the document.
   - name: expiry_date
     type: date
     required: false

@@ -21,7 +21,7 @@ model:
   - name: refunded_amount
     type: decimal(10,2)
     required: false
-    description: Column 'refunded_amount' of the 'refunds_daily' fact.
+    description: Amount refunded.
   - name: date_key
     type: integer
     required: false

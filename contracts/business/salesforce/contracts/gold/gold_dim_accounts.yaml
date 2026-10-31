@@ -18,44 +18,39 @@ model:
   - name: Id
     type: string
     required: true
-    description: Dimension attribute 'Id', projected from the 'accounts' entity.
+    description: Salesforce record ID; unique per record.
   - name: Type
     type: string
     required: false
-    description: Dimension attribute 'Type', projected from the 'accounts' entity.
+    description: Account type, such as customer or partner.
   - name: Industry
     type: string
     required: false
-    description: Dimension attribute 'Industry', projected from the 'accounts' entity.
+    description: Industry the account operates in.
   - name: BillingCity
     type: string
     required: false
-    description: Dimension attribute 'BillingCity', projected from the 'accounts'
-      entity.
+    description: City of the account's billing address.
   - name: BillingCountry
     type: string
     required: false
-    description: Dimension attribute 'BillingCountry', projected from the 'accounts'
-      entity.
+    description: Country of the account's billing address.
   - name: NumberOfEmployees
     type: Int64
     required: false
-    description: Dimension attribute 'NumberOfEmployees', projected from the 'accounts'
-      entity.
+    description: Number of employees at the account.
   - name: AnnualRevenue
     type: decimal(18,2)
     required: false
-    description: Dimension attribute 'AnnualRevenue', projected from the 'accounts'
-      entity.
+    description: Account's annual revenue.
   - name: OwnerId
     type: string
     required: false
-    description: Dimension attribute 'OwnerId', projected from the 'accounts' entity.
+    description: Salesforce user who owns the record.
   - name: RideFlow_Account_Code__c
     type: string
     required: false
-    description: Dimension attribute 'RideFlow_Account_Code__c', projected from the
-      'accounts' entity.
+    description: RideFlow's own code for the business account (custom field).
   - name: effective_from
     type: timestamp
     required: false

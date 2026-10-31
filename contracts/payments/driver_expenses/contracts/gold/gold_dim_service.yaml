@@ -18,7 +18,7 @@ model:
   - name: service
     type: string
     required: true
-    description: Dimension attribute 'service', projected from the 'service' entity.
+    description: Service the receipt is for.
   - name: system
     type: string
     required: true

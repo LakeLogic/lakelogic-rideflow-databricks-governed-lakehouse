@@ -18,8 +18,7 @@ model:
   - name: incident_type
     type: string
     required: true
-    description: Dimension attribute 'incident_type', projected from the 'incident_type'
-      entity.
+    description: Type of incident reported.
   - name: system
     type: string
     required: true
