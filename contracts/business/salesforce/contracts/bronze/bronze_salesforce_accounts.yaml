@@ -11,67 +11,51 @@ model:
   fields:
   - name: attributes
     type: json
-    description: Observed json column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_accounts.
+    description: Salesforce API metadata for the record (object type and URL).
   - name: Id
     type: string
-    description: Observed string column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_accounts.
+    description: Salesforce record ID; unique per record.
   - name: Name
     type: string
     pii: true
     classification: person_name
-    description: Observed string column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_accounts. Personal data (person_name),
-      not masked.
+    description: Name of the account or opportunity.
   - name: Type
     type: string
-    description: Observed string column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_accounts.
+    description: Account type, such as customer or partner.
   - name: Industry
     type: string
-    description: Observed string column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_accounts.
+    description: Industry the account operates in.
   - name: BillingCity
     type: string
-    description: Observed string column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_accounts.
+    description: City of the account's billing address.
   - name: BillingCountry
     type: string
-    description: Observed string column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_accounts.
+    description: Country of the account's billing address.
   - name: NumberOfEmployees
     type: Int64
-    description: Observed Int64 column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_accounts.
+    description: Number of employees at the account.
   - name: AnnualRevenue
     type: Float64
-    description: Observed Float64 column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_accounts.
+    description: Account's annual revenue.
   - name: OwnerId
     type: string
-    description: Observed string column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_accounts.
+    description: Salesforce user who owns the record.
   - name: RideFlow_Account_Code__c
     type: string
-    description: Observed string column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_accounts.
+    description: RideFlow's own code for the business account (custom field).
   - name: CreatedDate
     type: string
-    description: Observed string column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_accounts.
+    description: When the record was created in Salesforce.
   - name: LastModifiedDate
     type: string
-    description: Observed string column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_accounts.
+    description: When a user last changed the record in Salesforce.
   - name: SystemModstamp
     type: string
-    description: Observed string column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_accounts.
+    description: When the record was last changed by a user or by Salesforce itself.
   - name: IsDeleted
     type: boolean
-    description: Observed boolean column ingested from the scanned source salakelogicdemolanding
-      - landing.landing_business.salesforce_accounts.
+    description: Whether the record is in the Salesforce recycle bin.
 
 source:
   type: landing

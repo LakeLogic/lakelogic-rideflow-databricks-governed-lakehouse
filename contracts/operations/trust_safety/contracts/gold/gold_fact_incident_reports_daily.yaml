@@ -13,7 +13,7 @@ model:
   - name: activity_date
     type: date
     required: true
-    description: Grain key of the 'incident_reports_daily' fact.
+    description: Calendar day the row summarises.
   - name: estimated_cost
     type: double
     required: false

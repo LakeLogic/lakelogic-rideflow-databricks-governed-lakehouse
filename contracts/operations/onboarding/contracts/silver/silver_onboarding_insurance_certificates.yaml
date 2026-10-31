@@ -12,43 +12,35 @@ model:
   - name: file_path
     type: string
     required: false
-    description: Column 'file_path' projected from source table 'onboarding_insurance_certificates',
-      typed as string.
+    description: Path of the source document in the landing volume.
   - name: policy_reference
     type: string
     required: false
-    description: Column 'policy_reference' projected from source table 'onboarding_insurance_certificates',
-      typed as string.
+    description: Insurer's policy reference.
   - name: driver_id
     type: string
     required: true
-    description: Column 'driver_id' projected from source table 'onboarding_insurance_certificates',
-      typed as string.
+    description: RideFlow driver the record belongs to.
   - name: registration_mark
     type: string
     required: false
-    description: Column 'registration_mark' projected from source table 'onboarding_insurance_certificates',
-      typed as string.
+    description: Registration mark of the insured vehicle.
   - name: cover_start
     type: timestamp
     required: false
-    description: Column 'cover_start' projected from source table 'onboarding_insurance_certificates',
-      typed as timestamp.
+    description: Start of the insurance cover.
   - name: cover_end
     type: timestamp
     required: false
-    description: Column 'cover_end' projected from source table 'onboarding_insurance_certificates',
-      typed as timestamp.
+    description: End of the insurance cover.
   - name: policyholder_name
     type: string
     required: false
-    description: Column 'policyholder_name' projected from source table 'onboarding_insurance_certificates',
-      typed as string.
+    description: Name of the policyholder on the certificate.
   - name: use
     type: string
     required: false
-    description: Column 'use' projected from source table 'onboarding_insurance_certificates',
-      typed as string.
+    description: Permitted use of the insured vehicle, as stated on the certificate.
 
 materialization:
   strategy: overwrite

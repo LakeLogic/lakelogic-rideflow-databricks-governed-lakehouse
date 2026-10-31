@@ -1,6 +1,8 @@
 version: 1.0.0
 
 info:
+  data_product: reference_data
+  data_product_output: dim_country
   title: Gold — Dim Country
   target_layer: gold
   description: A reference list of countries, each identified by its three-letter

@@ -12,75 +12,61 @@ model:
   - name: attributes
     type: json
     required: false
-    description: Column 'attributes' projected from source table 'salesforce_opportunities',
-      typed as json.
+    description: Salesforce API metadata for the record (object type and URL).
   - name: Id
     type: string
     required: true
-    description: Business key 'Id' (from source table 'salesforce_opportunities'),
-      typed as string.
+    description: Salesforce record ID; unique per record.
   - name: AccountId
     type: string
     required: false
-    description: Column 'AccountId' projected from source table 'salesforce_opportunities',
-      typed as string.
+    description: Salesforce account the record belongs to.
   - name: Name
     type: string
     required: false
     pii: true
     classification: person_name
-    description: Column 'Name' projected from source table 'salesforce_opportunities',
-      typed as string. Personal data (person_name), not masked.
+    description: Name of the account or opportunity.
   - name: StageName
     type: string
     required: true
-    description: Column 'StageName' projected from source table 'salesforce_opportunities',
-      typed as string.
+    description: Sales stage of the opportunity.
   - name: Probability
     type: Int64
     required: false
-    description: Column 'Probability' projected from source table 'salesforce_opportunities',
-      typed as Int64.
+    description: Likelihood of winning the opportunity, in percent.
   - name: Amount
     type: decimal(18,2)
     required: false
-    description: Column 'Amount' projected from source table 'salesforce_opportunities',
-      typed as decimal(18,2).
+    description: Opportunity value.
   - name: CloseDate
     type: date
     required: false
-    description: Column 'CloseDate' projected from source table 'salesforce_opportunities',
-      typed as date.
+    description: Expected or actual close date of the opportunity.
   - name: LeadSource
     type: string
     required: false
-    description: Column 'LeadSource' projected from source table 'salesforce_opportunities',
-      typed as string.
+    description: Where the opportunity's lead came from.
   - name: OwnerId
     type: string
     required: false
-    description: Column 'OwnerId' projected from source table 'salesforce_opportunities',
-      typed as string.
+    description: Salesforce user who owns the record.
   - name: CreatedDate
     type: timestamp
     required: false
-    description: Column 'CreatedDate' projected from source table 'salesforce_opportunities',
-      typed as timestamp.
+    description: When the record was created in Salesforce.
   - name: LastModifiedDate
     type: timestamp
     required: false
-    description: Column 'LastModifiedDate' projected from source table 'salesforce_opportunities',
-      typed as timestamp.
+    description: When a user last changed the record in Salesforce.
   - name: SystemModstamp
     type: timestamp
     required: false
-    description: Column 'SystemModstamp' projected from source table 'salesforce_opportunities',
-      typed as timestamp.
+    description: When the record was last changed by a user or by Salesforce itself.
   - name: IsDeleted
     type: boolean
     required: false
-    description: Column 'IsDeleted' projected from source table 'salesforce_opportunities',
-      typed as boolean.
+    description: Whether the record is in the Salesforce recycle bin.
 
 primary_key:
 - Id

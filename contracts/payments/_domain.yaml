@@ -111,15 +111,7 @@ silver_layer: silver
 gold_layer: gold
 
 # ── Data Products ──────────────────────────────────────────────────────────
-products:
-  - id: payment_reconciliation
-    name: Payment Reconciliation
-    description: Charges, refunds and payouts reconciled against trips.
-    lifecycle: active
-    expected_outputs:
-    - id: fact_payment_reconciliation
-      name: Payment Reconciliation
-      kind: table
+products: []
 
 # Hold period per layer (Lakehouse Studio).
 retention:

@@ -18,8 +18,7 @@ model:
   - name: StageName
     type: string
     required: true
-    description: Dimension attribute 'StageName', projected from the 'stage_name'
-      entity.
+    description: Sales stage of the opportunity.
   - name: system
     type: string
     required: true

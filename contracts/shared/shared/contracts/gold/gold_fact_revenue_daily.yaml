@@ -44,6 +44,7 @@ model:
       description: "Sum of stripe_refunds.amount (subtract from gross to get net)."
     - name: refund_count
       type: integer
+      description: Number of refunds on the day's charges.
     - name: net_revenue_amount
       type: float
       description: "gross_revenue_amount - refund_amount."

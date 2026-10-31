@@ -12,80 +12,65 @@ model:
   - name: attributes
     type: json
     required: false
-    description: Column 'attributes' projected from source table 'salesforce_accounts',
-      typed as json.
+    description: Salesforce API metadata for the record (object type and URL).
   - name: Id
     type: string
     required: true
-    description: Business key 'Id' (from source table 'salesforce_accounts'), typed
-      as string.
+    description: Salesforce record ID; unique per record.
   - name: Name
     type: string
     required: false
     pii: true
     classification: person_name
-    description: Column 'Name' projected from source table 'salesforce_accounts',
-      typed as string. Personal data (person_name), not masked.
+    description: Name of the account or opportunity.
   - name: Type
     type: string
     required: false
-    description: Column 'Type' projected from source table 'salesforce_accounts',
-      typed as string.
+    description: Account type, such as customer or partner.
   - name: Industry
     type: string
     required: false
-    description: Column 'Industry' projected from source table 'salesforce_accounts',
-      typed as string.
+    description: Industry the account operates in.
   - name: BillingCity
     type: string
     required: false
-    description: Column 'BillingCity' projected from source table 'salesforce_accounts',
-      typed as string.
+    description: City of the account's billing address.
   - name: BillingCountry
     type: string
     required: false
-    description: Column 'BillingCountry' projected from source table 'salesforce_accounts',
-      typed as string.
+    description: Country of the account's billing address.
   - name: NumberOfEmployees
     type: Int64
     required: false
-    description: Column 'NumberOfEmployees' projected from source table 'salesforce_accounts',
-      typed as Int64.
+    description: Number of employees at the account.
   - name: AnnualRevenue
     type: decimal(18,2)
     required: false
-    description: Column 'AnnualRevenue' projected from source table 'salesforce_accounts',
-      typed as decimal(18,2).
+    description: Account's annual revenue.
   - name: OwnerId
     type: string
     required: false
-    description: Column 'OwnerId' projected from source table 'salesforce_accounts',
-      typed as string.
+    description: Salesforce user who owns the record.
   - name: RideFlow_Account_Code__c
     type: string
     required: false
-    description: Column 'RideFlow_Account_Code__c' projected from source table 'salesforce_accounts',
-      typed as string.
+    description: RideFlow's own code for the business account (custom field).
   - name: CreatedDate
     type: timestamp
     required: false
-    description: Column 'CreatedDate' projected from source table 'salesforce_accounts',
-      typed as timestamp.
+    description: When the record was created in Salesforce.
   - name: LastModifiedDate
     type: timestamp
     required: false
-    description: Column 'LastModifiedDate' projected from source table 'salesforce_accounts',
-      typed as timestamp.
+    description: When a user last changed the record in Salesforce.
   - name: SystemModstamp
     type: timestamp
     required: false
-    description: Column 'SystemModstamp' projected from source table 'salesforce_accounts',
-      typed as timestamp.
+    description: When the record was last changed by a user or by Salesforce itself.
   - name: IsDeleted
     type: boolean
     required: false
-    description: Column 'IsDeleted' projected from source table 'salesforce_accounts',
-      typed as boolean.
+    description: Whether the record is in the Salesforce recycle bin.
 
 primary_key:
 - Id

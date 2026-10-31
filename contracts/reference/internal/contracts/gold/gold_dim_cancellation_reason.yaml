@@ -1,6 +1,8 @@
 version: 1.0.0
 
 info:
+  data_product: reference_data
+  data_product_output: dim_cancellation_reason
   title: Gold — Dim Cancellation Reason
   target_layer: gold
   description: A reference list of the reasons a cancellation can be recorded against,

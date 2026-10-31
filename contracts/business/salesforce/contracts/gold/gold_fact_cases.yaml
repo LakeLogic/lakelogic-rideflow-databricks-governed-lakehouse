@@ -14,23 +14,23 @@ model:
   - name: Id
     type: string
     required: true
-    description: Grain key of the 'cases' fact.
+    description: Salesforce record ID; unique per record.
   - name: CreatedDate
     type: timestamp
     required: false
-    description: Column 'CreatedDate' of the 'cases' fact.
+    description: When the record was created in Salesforce.
   - name: ClosedDate
     type: date
     required: false
-    description: Column 'ClosedDate' of the 'cases' fact.
+    description: When the case was closed.
   - name: CaseNumber
     type: string
     required: false
-    description: Column 'CaseNumber' of the 'cases' fact.
+    description: Case number shown to users in Salesforce.
   - name: Subject
     type: string
     required: false
-    description: Column 'Subject' of the 'cases' fact.
+    description: Short summary of the case.
   - name: account_sk
     type: string
     required: true

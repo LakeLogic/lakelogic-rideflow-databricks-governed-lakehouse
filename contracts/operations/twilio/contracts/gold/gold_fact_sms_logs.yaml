@@ -28,7 +28,7 @@ model:
   - name: message_count
     type: integer
     required: false
-    description: Column 'message_count' of the 'sms_logs' fact.
+    description: Number of SMS messages in the row.
   - name: sent_at
     type: timestamp
     required: false

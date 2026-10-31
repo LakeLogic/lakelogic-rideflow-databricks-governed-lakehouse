@@ -12,60 +12,49 @@ model:
   - name: file_path
     type: string
     required: false
-    description: Column 'file_path' projected from source table 'driver_expenses_receipts',
-      typed as string.
+    description: Path of the source document in the landing volume.
   - name: merchant
     type: string
     required: false
-    description: Column 'merchant' projected from source table 'driver_expenses_receipts',
-      typed as string.
+    description: Merchant named on the receipt.
   - name: branch_city_code
     type: string
     required: false
-    description: Column 'branch_city_code' projected from source table 'driver_expenses_receipts',
-      typed as string.
+    description: City code of the merchant branch on the receipt.
   - name: receipt_date
     type: date
     required: false
-    description: Column 'receipt_date' projected from source table 'driver_expenses_receipts',
-      typed as date.
+    description: Date printed on the receipt.
   - name: receipt_time
     type: timestamp
     required: false
-    description: Column 'receipt_time' projected from source table 'driver_expenses_receipts',
-      typed as timestamp.
+    description: Date and time printed on the receipt.
   - name: receipt_number
     type: string
     required: false
-    description: Column 'receipt_number' projected from source table 'driver_expenses_receipts',
-      typed as string.
+    description: Receipt number printed by the merchant.
   - name: service
     type: string
     required: false
-    description: Column 'service' projected from source table 'driver_expenses_receipts',
-      typed as string.
+    description: Service the receipt is for.
   - name: total_amount
     type: decimal(10,2)
     required: false
-    description: Column 'total_amount' projected from source table 'driver_expenses_receipts',
-      typed as decimal(10,2).
+    description: Total amount on the receipt, including VAT.
   - name: vat_amount
     type: decimal(10,2)
     required: false
-    description: Column 'vat_amount' projected from source table 'driver_expenses_receipts',
-      typed as decimal(10,2).
+    description: VAT amount on the receipt.
   - name: card_last4
     type: string
     required: false
     sensitive: true
     classification: financial_account
-    description: Column 'card_last4' projected from source table 'driver_expenses_receipts',
-      typed as string. Confidential (financial_account), not masked.
+    description: Last four digits of the payment card on the receipt.
   - name: driver_id
     type: string
     required: true
-    description: Column 'driver_id' projected from source table 'driver_expenses_receipts',
-      typed as string.
+    description: RideFlow driver the record belongs to.
 
 materialization:
   strategy: overwrite

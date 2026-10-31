@@ -21,17 +21,22 @@ model:
     # ── Dimensions ──
     - name: kpi_date
       type: date
+      description: Calendar day the measures are for.
       required: true
     - name: city_code
       type: string
+      description: RideFlow city code.
       required: true
     # ── Volume ──
     - name: requested_trips
       type: integer
+      description: Trips requested in the city that day.
     - name: completed_trips
       type: integer
+      description: Trips completed in the city that day.
     - name: cancelled_trips
       type: integer
+      description: Trips cancelled in the city that day.
     # ── Ratios ──
     - name: completion_rate
       type: float
