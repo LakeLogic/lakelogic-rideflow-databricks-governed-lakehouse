@@ -3,13 +3,7 @@ version: 1.0.0
 info:
   title: Gold — Fact Trips Daily
   target_layer: gold
-  description: The table aggregates daily ride metrics from the rideflow system, capturing
-    key performance indicators such as total fares, tips, distances traveled, average
-    ride durations, surge multipliers, and rider and driver ratings. It provides a
-    comprehensive overview of ride activities for each day, enabling time-based analysis
-    and reporting. The data includes both financial metrics and operational insights,
-    supporting revenue tracking, service efficiency evaluation, and customer satisfaction
-    assessment.
+  description: 'grain: one row per day'
   table_name: '{gold_layer}_fact_trips_daily'
   system: rideflow
   domain: marketplace
@@ -19,43 +13,27 @@ model:
   - name: activity_date
     type: date
     required: true
-    description: The date on which the ride activities occurred, used for time-based
-      analysis and reporting.
   - name: total_fare_amount
     type: float
     required: false
-    description: The aggregated fare amount collected from all rides on the activity
-      date, indicating revenue generated.
   - name: total_tip_amount
     type: float
     required: false
-    description: The aggregated tip amounts from all rides on the activity date, reflecting
-      customer satisfaction and additional revenue.
   - name: total_distance_km
     type: float
     required: false
-    description: The total distance covered by all rides on the activity date, useful
-      for analyzing service coverage and driver efficiency.
   - name: avg_duration_minutes
     type: float
     required: false
-    description: The average duration of rides on the activity date, providing insights
-      into ride efficiency and traffic conditions.
   - name: avg_surge_multiplier
     type: float
     required: false
-    description: The average surge pricing multiplier applied during rides on the
-      activity date, indicating demand fluctuations.
   - name: avg_rider_rating
     type: float
     required: false
-    description: The average rating given by riders to drivers on the activity date,
-      reflecting service quality and customer satisfaction.
   - name: avg_driver_rating
     type: float
     required: false
-    description: The average rating given by drivers to riders on the activity date,
-      indicating rider behavior and satisfaction.
   - name: date_key
     type: integer
     required: false

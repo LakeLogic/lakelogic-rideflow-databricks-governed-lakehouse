@@ -3,10 +3,7 @@ version: 1.0.0
 info:
   title: Gold — Dim Platform
   target_layer: gold
-  description: The table contains a unique surrogate key for each ride-sharing platform,
-    generated as a SHA-256 hash of the platform's business key, with '-1' used when
-    the member is unknown, along with the platform name and the source system identifier
-    to trace data back to its origin.
+  description: 'grain: one row per platform'
   table_name: '{gold_layer}_rideflow_dim_platform'
   system: rideflow
   domain: marketplace
@@ -21,8 +18,8 @@ model:
   - name: platform
     type: string
     required: true
-    description: Name of the platform, representing the service or application providing
-      the ride-sharing functionality.
+    description: Platform on which the app is running (e.g., iOS, Android), aiding
+      in platform-specific analysis and optimization.
   - name: system
     type: string
     required: true

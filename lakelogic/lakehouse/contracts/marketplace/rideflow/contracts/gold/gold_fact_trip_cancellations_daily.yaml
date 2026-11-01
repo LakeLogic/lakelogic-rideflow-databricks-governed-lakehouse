@@ -3,11 +3,7 @@ version: 1.0.0
 info:
   title: Gold — Fact Trip Cancellations Daily
   target_layer: gold
-  description: The table records each day's trip cancellations within the rideflow
-    marketplace, capturing the exact date of cancellation for analytical purposes,
-    the optional fee amount applied to the cancellation for financial tracking, and
-    a numeric date key for integration with date dimension tables, along with an identifier
-    for the originating system to support data lineage verification.
+  description: 'grain: one row per day'
   table_name: '{gold_layer}_fact_trip_cancellations_daily'
   system: rideflow
   domain: marketplace
@@ -17,13 +13,9 @@ model:
   - name: activity_date
     type: date
     required: true
-    description: The date when the trip cancellation occurred, used for time-based
-      analysis and reporting.
   - name: cancellation_fee_amount
     type: float
     required: false
-    description: The monetary amount charged as a fee for the trip cancellation, important
-      for revenue tracking and financial analysis.
   - name: date_key
     type: integer
     required: false

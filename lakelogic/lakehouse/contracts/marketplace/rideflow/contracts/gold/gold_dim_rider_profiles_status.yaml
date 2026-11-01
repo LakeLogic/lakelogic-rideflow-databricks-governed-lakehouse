@@ -3,11 +3,7 @@ version: 1.0.0
 info:
   title: Gold — Dim Rider Profiles Status
   target_layer: gold
-  description: The table holds the current status of rider profiles, indicating whether
-    they are active, inactive, or pending, along with the system of origin for each
-    status record to support reliable joins and lookups across the data model. The
-    data comes from the rideflow system, capturing essential rider profile states
-    for marketplace operations.
+  description: 'grain: one row per status'
   table_name: '{gold_layer}_dim_rider_profiles_status'
   system: rideflow
   domain: marketplace
@@ -22,8 +18,8 @@ model:
   - name: status
     type: string
     required: true
-    description: The current status of the rider profile, indicating their active,
-      inactive, or pending state.
+    description: Current status of the rider's account, indicating activity level
+      or special conditions.
   - name: system
     type: string
     required: true

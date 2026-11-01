@@ -3,12 +3,6 @@ version: 1.0.0
 info:
   title: Silver — Rideflow Trips
   target_layer: silver
-  description: Each record captures a completed ride within the marketplace, linking
-    riders and drivers along with details such as the ride type, pickup and dropoff
-    locations, timestamps for request and completion, trip distance and duration,
-    fare and tip amounts, payment method, and ratings exchanged between rider and
-    driver. The data originates from the Rideflow system, reflecting actual transactions
-    and service levels provided during each trip.
   table_name: '{silver_layer}_rideflow_trips'
   system: rideflow
   domain: marketplace
@@ -18,121 +12,85 @@ model:
   - name: trip_id
     type: string
     required: true
-    description: Unique identifier for each ride trip, used to track and reference
-      individual transactions.
   - name: rider_id
     type: string
     required: true
-    description: Identifier for the rider requesting the trip, linking the trip to
-      the rider's account.
   - name: driver_id
     type: string
     required: true
-    description: Identifier for the driver who fulfilled the trip, linking the trip
-      to the driver's account.
   - name: trip_type
     type: string
     required: false
-    description: Type of ride service provided (e.g., standard, premium), indicating
-      the service level or vehicle type.
   - name: pickup_lat
     type: float
     required: false
     pii: true
     classification: gps_coordinate
-    description: Latitude coordinate where the rider was picked up, essential for
-      route mapping and trip analysis.
+    description: Personal data (gps_coordinate), real values here, masked at gold
+      (redact).
   - name: pickup_lng
     type: float
     required: false
     pii: true
     classification: gps_coordinate
-    description: Longitude coordinate where the rider was picked up, completing the
-      pickup location data.
+    description: Personal data (gps_coordinate), real values here, masked at gold
+      (redact).
   - name: dropoff_lat
     type: float
     required: false
     pii: true
     classification: gps_coordinate
-    description: Latitude coordinate where the rider was dropped off, important for
-      trip completion tracking.
+    description: Personal data (gps_coordinate), real values here, masked at gold
+      (redact).
   - name: dropoff_lng
     type: float
     required: false
     pii: true
     classification: gps_coordinate
-    description: Longitude coordinate where the rider was dropped off, completing
-      the dropoff location data.
+    description: Personal data (gps_coordinate), real values here, masked at gold
+      (redact).
   - name: city_code
     type: string
     required: false
-    description: Code representing the city where the trip occurred, used for regional
-      analysis and reporting.
   - name: country_code
     type: string
     required: false
-    description: Code representing the country where the trip occurred, used for international
-      reporting and compliance.
   - name: requested_at
     type: timestamp
     required: false
-    description: Timestamp indicating when the ride was requested, useful for analyzing
-      demand patterns.
   - name: pickup_at
     type: timestamp
     required: false
-    description: Timestamp indicating when the ride actually began, important for
-      calculating trip duration and timing.
   - name: dropoff_at
     type: timestamp
     required: false
-    description: Timestamp indicating when the ride was completed, crucial for trip
-      duration and performance metrics.
   - name: distance_km
     type: float
     required: false
-    description: Distance of the trip in kilometers, used for fare calculation and
-      service analysis.
   - name: duration_minutes
     type: integer
     required: false
-    description: Duration of the trip in minutes, key for performance metrics and
-      customer satisfaction analysis.
   - name: fare_amount
     type: float
     required: false
-    description: Total fare charged for the trip, central to revenue tracking and
-      financial reporting.
   - name: surge_multiplier
     type: float
     required: false
-    description: Multiplier applied to the fare during high-demand periods, indicating
-      surge pricing conditions.
   - name: tip_amount
     type: float
     required: false
-    description: Amount tipped by the rider, contributing to driver earnings and customer
-      satisfaction insights.
   - name: payment_method
     type: string
     required: false
-    description: Method used for payment (e.g., credit card, cash), important for
-      financial tracking and fraud prevention.
   - name: rider_rating
     type: float
     required: false
-    description: Rating given by the rider to the driver, reflecting service quality
-      and driver performance.
   - name: driver_rating
     type: float
     required: false
-    description: Rating given by the driver to the rider, providing feedback on rider
-      behavior and experience.
   - name: notes
     type: string
     required: false
-    description: Additional comments or notes regarding the trip, useful for customer
-      service and quality assurance.
   - name: dropoff_date
     type: date
     required: false
