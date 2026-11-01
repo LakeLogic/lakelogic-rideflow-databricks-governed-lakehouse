@@ -2,14 +2,14 @@ version: 1.0.0
 
 info:
   title: Bronze — Google Ads Campaigns
-  target_layer: bronze
   description: The table records performance metrics for individual advertising campaigns
     and their ad groups from Google Ads, capturing essential data such as impressions,
     clicks, costs, and conversions to evaluate the effectiveness and financial impact
-    of marketing efforts over specific dates.
-  table_name: '{bronze_layer}_google_ads_campaigns'
+    of marketing efforts over specific dates. Second update.
+  target_layer: bronze
   domain: marketing
   system: google_ads
+  table_name: '{bronze_layer}_google_ads_campaigns'
 
 model:
   fields:

@@ -1,7 +1,7 @@
 # Synthetic data generator bundle (LakeLogic Synthetic v2)
 
 Source: lakehouse design bp:snap-7ca870d1dda142db r1
-Generated at: revision:chv1:2fc51b81bdf6952ee34e50711d632f4547e2880e5e610273bc83991ae7f38f50 seal:sha256:bb8a338dcef1c410b29f3593a4b9208a2a067e37192afef793154074fe379973
+Generated at: revision:see .lakelogic/project.yaml seal:see .lakelogic/project.yaml
 Generator: lakelogic DataGenerator v1.88.0
 
 ## Fidelity profile: contract-derived
