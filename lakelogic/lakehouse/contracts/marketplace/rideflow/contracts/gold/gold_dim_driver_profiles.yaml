@@ -1,0 +1,97 @@
+version: 1.0.0
+
+info:
+  title: Gold — Dim Driver Profiles
+  target_layer: gold
+  description: 'grain: one row per driver'
+  table_name: '{gold_layer}_dim_driver_profiles'
+  system: rideflow
+  domain: marketplace
+
+model:
+  fields:
+  - name: driver_profiles_sk
+    type: string
+    required: false
+    description: 'Surrogate key: sha256 of the business key, written by the materializer;
+      ''-1'' is the unknown member.'
+  - name: driver_id
+    type: string
+    required: true
+    description: Unique identifier for the driver within the rideflow system.
+  - name: bank_account_last_four
+    type: string
+    required: false
+    sensitive: true
+    masking: hash
+    classification: financial_account
+    description: Last four digits of the driver's bank account, used for payment verification.
+  - name: city_code
+    type: string
+    required: false
+    description: Code representing the city where the driver is based, for location-based
+      services.
+  - name: country_code
+    type: string
+    required: false
+    description: Code representing the country of the driver, for regional compliance
+      and services.
+  - name: licence_number
+    type: string
+    required: false
+    pii: true
+    masking: hash
+    classification: licence_id
+    description: Driver's licence number, required for legal operation of the vehicle.
+  - name: licence_plate
+    type: string
+    required: false
+    pii: true
+    masking: hash
+    classification: licence_plate
+    description: Vehicle licence plate number, used for vehicle identification and
+      tracking.
+  - name: rating
+    type: float
+    required: false
+    description: Overall rating of the driver based on passenger feedback.
+  - name: signup_date
+    type: date
+    required: false
+    description: Date when the driver joined the rideflow platform.
+  - name: status
+    type: string
+    required: false
+    description: Current operational status of the driver (e.g., active, inactive).
+  - name: system
+    type: string
+    required: true
+    description: Source system this row came from
+
+dataset: gold_dim_driver_profiles
+
+primary_key:
+- driver_id
+
+materialization:
+  scd1:
+    surrogate_key: driver_profiles_sk
+    surrogate_key_strategy: hash
+    unknown_member:
+      enabled: true
+      surrogate_key_value: '-1'
+
+source:
+  type: table
+  path: table:{domain_catalog}.{silver_layer}_rideflow_driver_profiles
+  load_mode: incremental
+  watermark_field: _lakelogic_processed_at
+
+metadata:
+  run_log_table: '{domain_catalog}.lakelogic_run_log'
+
+transformations:
+- phase: pre
+  derive:
+    field: system
+    sql: '''rideflow'''

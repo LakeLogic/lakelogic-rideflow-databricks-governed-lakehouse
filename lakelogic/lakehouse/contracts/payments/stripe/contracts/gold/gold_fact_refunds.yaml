@@ -1,0 +1,101 @@
+version: 1.0.0
+
+info:
+  title: Gold — Fact Refunds
+  target_layer: gold
+  description: 'grain: one row per refund'
+  table_name: '{gold_layer}_fact_refunds'
+  system: stripe
+  domain: payments
+
+model:
+  fields:
+  - name: refund_id
+    type: string
+    required: true
+    description: Unique identifier for the refund transaction, essential for tracking
+      and referencing specific refund actions.
+  - name: total_refund_amount
+    type: float
+    required: false
+  - name: status
+    type: string
+    required: false
+    description: Current state of the refund process, indicating whether it is succeeded,
+      failed, or pending.
+  - name: reason
+    type: string
+    required: false
+    description: Reason provided by Stripe for the refund, offering insight into why
+      the refund was issued.
+  - name: refund_reason
+    type: string
+    required: false
+    description: Custom or detailed reason for the refund as recorded by the business,
+      supporting internal analysis and customer service.
+  - name: currency
+    type: string
+    required: false
+    description: Currency in which the refund is processed, important for financial
+      reporting and multi-currency transactions.
+  - name: created_at
+    type: timestamp
+    required: false
+    description: Timestamp indicating when the refund was initiated, crucial for auditing
+      and time-based analysis.
+  - name: created_date
+    type: date
+    required: false
+    description: 'Partition column: the calendar date of `created_at`.'
+  - name: system
+    type: string
+    required: true
+    description: Source system this row came from
+
+dataset: gold_fact_refunds
+
+primary_key:
+- refund_id
+
+quality:
+  dataset_rules:
+  - unique:
+      columns:
+      - refund_id
+      name: refund_id_unique
+      category: uniqueness
+      description: No two rows share the same refund_id.
+
+transformations:
+- phase: pre
+  sql: |-
+    SELECT
+      r.refund_id,
+      r.status,
+      r.reason,
+      r.refund_reason,
+      r.currency,
+      r.created_at,
+      r.amount AS total_refund_amount,
+      CAST(r.created_at AS DATE) AS created_date
+    FROM source r
+- phase: pre
+  derive:
+    field: system
+    sql: '''stripe'''
+
+materialization:
+  strategy: append
+  fact:
+    type: transaction
+  partition_by:
+  - created_date
+
+source:
+  type: table
+  path: table:{domain_catalog}.{silver_layer}_stripe_refunds
+  load_mode: incremental
+  watermark_field: _lakelogic_processed_at
+
+metadata:
+  run_log_table: '{domain_catalog}.lakelogic_run_log'

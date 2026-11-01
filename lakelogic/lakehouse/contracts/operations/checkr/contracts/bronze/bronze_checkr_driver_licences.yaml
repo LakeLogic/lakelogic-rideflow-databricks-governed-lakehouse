@@ -1,0 +1,52 @@
+version: 1.0.0
+
+info:
+  title: Bronze — Checkr Driver Licences
+  target_layer: bronze
+  description: The table contains personal information for drivers, including their
+    full names, licence numbers, and dates of birth, which are used to identify licence
+    holders and verify their identities. It also records the expiry dates of the drivers'
+    licences and the vehicle classes they are licensed to operate, ensuring compliance
+    and safety checks. The data originates from Checkr and includes personally identifiable
+    information that requires careful handling.
+  table_name: '{bronze_layer}_checkr_driver_licences'
+  domain: operations
+  system: checkr
+
+model:
+  fields:
+  - name: full_name
+    type: string
+    pii: true
+    classification: person_name
+    description: The full name of the driver, used to identify the licence holder.
+  - name: licence_number
+    type: string
+    pii: true
+    classification: licence_id
+    description: The unique identifier for the driver's licence, used for verification
+      and record-keeping.
+  - name: date_of_birth
+    type: string
+    pii: true
+    classification: date_of_birth
+    description: The date of birth of the driver, used to confirm identity and age
+      requirements.
+  - name: expiry_date
+    type: date
+    description: The date when the driver's licence expires, important for compliance
+      and safety checks.
+  - name: vehicle_classes
+    type: string
+    description: The types of vehicles the driver is licensed to operate, relevant
+      for determining driving eligibility and restrictions.
+
+source:
+  type: landing
+  path: '{landing_root}/driver_licences'
+  load_mode: full
+
+primary_key:
+- licence_number
+
+dataset: bronze_checkr_driver_licences

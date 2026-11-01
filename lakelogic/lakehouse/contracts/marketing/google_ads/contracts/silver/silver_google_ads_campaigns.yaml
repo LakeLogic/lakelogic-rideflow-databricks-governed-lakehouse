@@ -1,0 +1,105 @@
+version: 1.0.0
+
+info:
+  title: Silver — Google Ads Campaigns
+  target_layer: silver
+  description: The table captures performance metrics for individual advertising campaigns
+    and their ad groups from Google Ads, including reach, engagement, financial expenditure,
+    and conversion outcomes, allowing for detailed analysis and optimization of marketing
+    efforts. It records key indicators such as impressions, clicks, costs, and conversions,
+    along with their associated monetary values, to evaluate the effectiveness of
+    each campaign. The data is collected on specific dates and includes currency information
+    to contextualize financial metrics.
+  table_name: '{silver_layer}_google_ads_campaigns'
+  system: google_ads
+  domain: marketing
+
+model:
+  fields:
+  - name: campaign_id
+    type: string
+    required: true
+    description: Unique identifier for the campaign, used to distinguish and track
+      individual advertising efforts.
+  - name: campaign_name
+    type: string
+    required: false
+    description: Name of the campaign, providing a human-readable label for marketing
+      activities.
+  - name: ad_group_id
+    type: string
+    required: true
+    description: Unique identifier for the ad group within the campaign, organizing
+      ads into manageable segments.
+  - name: ad_group_name
+    type: string
+    required: false
+    description: Name of the ad group, offering a descriptive label for grouped ads.
+  - name: date
+    type: date
+    required: false
+    description: Date of the data collection, indicating when the metrics were recorded.
+  - name: impressions
+    type: integer
+    required: false
+    description: Number of times the ads were shown, reflecting reach and visibility.
+  - name: clicks
+    type: integer
+    required: false
+    description: Number of times the ads were clicked, measuring user engagement.
+  - name: cost
+    type: float
+    required: false
+    description: Total cost incurred for the campaign, indicating financial expenditure.
+  - name: conversions
+    type: integer
+    required: false
+    description: Number of conversions, representing the count of desired actions
+      completed by users.
+  - name: conversion_value
+    type: decimal(18,2)
+    required: false
+    description: Monetary value of the conversions, estimating the revenue generated
+      from user actions.
+  - name: currency
+    type: string
+    required: false
+    description: Currency in which the cost and conversion value are denoted, providing
+      context for financial metrics.
+
+primary_key:
+- campaign_id
+
+quality:
+  row_rules:
+  - name: campaign_id_not_null
+    sql: campaign_id IS NOT NULL
+    category: completeness
+    description: campaign_id is always present (never null).
+  - name: ad_group_id_not_null
+    sql: ad_group_id IS NOT NULL
+    category: completeness
+    description: ad_group_id is always present (never null).
+  - name: campaign_id_not_null
+    sql: campaign_id IS NOT NULL
+    category: completeness
+    description: campaign_id is always present (never null).
+
+transformations:
+- deduplicate:
+    by:
+    - campaign_id
+    sort_by:
+    - date
+    order: desc
+
+dataset: silver_google_ads_campaigns
+
+source:
+  type: table
+  path: table:{domain_catalog}.{bronze_layer}_google_ads_campaigns
+  load_mode: incremental
+  watermark_field: _lakelogic_processed_at
+
+metadata:
+  run_log_table: '{domain_catalog}.lakelogic_run_log'

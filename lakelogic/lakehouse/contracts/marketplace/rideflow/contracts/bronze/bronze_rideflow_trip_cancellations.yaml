@@ -1,0 +1,79 @@
+version: 1.0.0
+
+info:
+  title: Bronze — Rideflow Trip Cancellations
+  target_layer: bronze
+  description: The table records each instance when a ride was cancelled in the marketplace,
+    capturing details such as the unique cancellation identifier, the trip and user
+    IDs for both rider and driver, the party initiating the cancellation, the reason
+    code, location codes for city and country, timestamps for when the cancellation
+    was requested and finalized, and any associated cancellation fee, supporting analysis
+    of cancellation trends, user behavior, and financial tracking.
+  table_name: '{bronze_layer}_rideflow_trip_cancellations'
+  domain: marketplace
+  system: rideflow
+
+model:
+  fields:
+  - name: cancellation_id
+    type: string
+    description: Unique identifier for the cancellation event, used to track and reference
+      each cancellation record.
+  - name: trip_id
+    type: string
+    description: Identifier for the trip that was cancelled, linking the cancellation
+      to the original trip details.
+  - name: rider_id
+    type: string
+    description: Identifier for the rider who requested or experienced the cancellation,
+      used to analyze rider behavior and satisfaction.
+  - name: driver_id
+    type: string
+    description: Identifier for the driver involved in the cancelled trip, used to
+      assess driver performance and issues.
+  - name: cancelled_by
+    type: string
+    description: Indicates whether the cancellation was initiated by the rider or
+      the driver, helping to understand cancellation trends and reasons.
+  - name: cancel_reason_code
+    type: string
+    description: Code representing the reason for the cancellation, used for categorizing
+      and analyzing cancellation causes.
+  - name: city_code
+    type: string
+    description: Code representing the city where the cancellation occurred, used
+      for regional analysis and reporting.
+  - name: country_code
+    type: string
+    description: Code representing the country where the cancellation occurred, used
+      for country-level analysis and compliance.
+  - name: requested_at
+    type: timestamp
+    description: Timestamp indicating when the cancellation was requested, used to
+      track the timing and pattern of cancellations.
+  - name: cancelled_at
+    type: timestamp
+    description: Timestamp indicating when the cancellation was finalized, used to
+      measure cancellation processing times.
+  - name: cancellation_fee
+    type: float
+    description: Fee applied for the cancellation, used for financial tracking and
+      policy enforcement.
+
+source:
+  type: landing
+  path: '{landing_root}/trip_cancellations'
+  load_mode: full
+
+quality:
+  row_rules:
+  - name: country_code_partition_not_null
+    sql: country_code IS NOT NULL
+    category: completeness
+    description: country_code is always present (never null).
+
+materialization:
+  partition_by:
+  - country_code
+
+dataset: bronze_rideflow_trip_cancellations

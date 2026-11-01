@@ -1,0 +1,115 @@
+version: 1.0.0
+
+info:
+  title: Gold — Fact Campaigns (Google Ads)
+  target_layer: gold
+  description: The table holds aggregated performance metrics for individual ad groups
+    within Google Ads campaigns, including impressions, clicks, conversions, and associated
+    costs, allowing for detailed analysis of campaign effectiveness and ROI over specific
+    dates. The data originates from Google Ads, capturing detailed campaign activities
+    and financial outcomes in specified currencies to support marketing decision-making
+    and budget analysis.
+  table_name: '{gold_layer}_google_ads_fact_campaigns'
+  system: google_ads
+  domain: marketing
+
+model:
+  fields:
+  - name: campaign_id
+    type: string
+    required: true
+    description: Unique identifier for the campaign, used to distinguish and track
+      individual advertising efforts.
+  - name: ad_group_id
+    type: string
+    required: true
+    description: Unique identifier for the ad group within the campaign, organizing
+      ads into manageable segments.
+  - name: date
+    type: date
+    required: true
+    description: Date of the data collection, indicating when the metrics were recorded.
+  - name: total_impressions
+    type: integer
+    required: false
+    description: Number of times the ads were shown, indicating reach and visibility.
+  - name: total_clicks
+    type: integer
+    required: false
+    description: Number of times users clicked on the ads, reflecting engagement and
+      interest.
+  - name: total_conversions
+    type: integer
+    required: false
+    description: Number of desired actions completed by users, such as purchases or
+      sign-ups, measuring campaign effectiveness.
+  - name: total_cost
+    type: float
+    required: false
+    description: Total monetary cost incurred for the campaign, used for budgeting
+      and ROI calculations.
+  - name: campaign_name
+    type: string
+    required: false
+    description: Name of the campaign, providing a human-readable label for marketing
+      activities.
+  - name: currency
+    type: string
+    required: false
+    description: Currency in which the cost and conversion value are denoted, providing
+      context for financial metrics.
+  - name: system
+    type: string
+    required: true
+    description: Source system this row came from
+
+dataset: gold_google_ads_fact_campaigns
+
+primary_key:
+- campaign_id
+- ad_group_id
+- date
+
+quality:
+  dataset_rules:
+  - unique:
+      columns:
+      - campaign_id
+      - ad_group_id
+      - date
+      name: campaign_id_ad_group_id_date_unique
+      category: uniqueness
+      description: No two rows share the same campaign_id, ad_group_id, date.
+
+transformations:
+- phase: pre
+  sql: |-
+    SELECT
+      r.campaign_id,
+      r.ad_group_id,
+      r.date,
+      r.campaign_name,
+      r.currency,
+      r.impressions AS total_impressions,
+      r.clicks AS total_clicks,
+      r.conversions AS total_conversions,
+      r.cost AS total_cost
+    FROM source r
+- phase: pre
+  derive:
+    field: system
+    sql: '''google_ads'''
+
+materialization:
+  strategy: append
+  fact:
+    type: transaction
+
+source:
+  type: table
+  path: table:{domain_catalog}.{silver_layer}_google_ads_campaigns
+  load_mode: incremental
+  watermark_field: _lakelogic_processed_at
+
+metadata:
+  run_log_table: '{domain_catalog}.lakelogic_run_log'

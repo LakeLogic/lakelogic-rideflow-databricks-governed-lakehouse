@@ -1,0 +1,110 @@
+version: 1.0.0
+
+info:
+  title: Gold — Fact Campaigns (Meta Ads)
+  target_layer: gold
+  description: The table captures key performance metrics for advertising campaigns
+    run through Meta Ads, including impressions, clicks, and conversions, allowing
+    for detailed analysis of campaign effectiveness over time. It includes identifiers
+    for campaigns and ad sets, along with the campaign name and currency used, to
+    facilitate organized reporting and financial analysis. The data originates from
+    the Meta Ads system, ensuring accurate tracking and verification of campaign performance
+    metrics.
+  table_name: '{gold_layer}_meta_ads_fact_campaigns'
+  system: meta_ads
+  domain: marketing
+
+model:
+  fields:
+  - name: campaign_id
+    type: string
+    required: true
+    description: Unique identifier for the advertising campaign, essential for tracking
+      and reporting campaign performance.
+  - name: adset_id
+    type: string
+    required: true
+    description: Unique identifier for the ad set within the campaign, helps in segmenting
+      and analyzing ad performance.
+  - name: date
+    type: date
+    required: true
+    description: Date of the data record, important for time-based analysis and trend
+      tracking.
+  - name: total_impressions
+    type: integer
+    required: false
+    description: Number of times the ad was shown to users, reflecting reach and visibility.
+  - name: total_clicks
+    type: integer
+    required: false
+    description: Number of times users clicked on the ad, indicating engagement level.
+  - name: total_conversions
+    type: integer
+    required: false
+    description: Number of desired actions completed by users after seeing or clicking
+      the ad, such as purchases or sign-ups.
+  - name: campaign_name
+    type: string
+    required: false
+    description: Name of the advertising campaign, used for easy identification and
+      organization.
+  - name: currency
+    type: string
+    required: false
+    description: Currency in which the spend is reported, important for financial
+      reporting and analysis.
+  - name: system
+    type: string
+    required: true
+    description: Source system this row came from
+
+dataset: gold_meta_ads_fact_campaigns
+
+primary_key:
+- campaign_id
+- adset_id
+- date
+
+quality:
+  dataset_rules:
+  - unique:
+      columns:
+      - campaign_id
+      - adset_id
+      - date
+      name: campaign_id_adset_id_date_unique
+      category: uniqueness
+      description: No two rows share the same campaign_id, adset_id, date.
+
+transformations:
+- phase: pre
+  sql: |-
+    SELECT
+      r.campaign_id,
+      r.adset_id,
+      r.date,
+      r.campaign_name,
+      r.currency,
+      r.impressions AS total_impressions,
+      r.clicks AS total_clicks,
+      r.conversions AS total_conversions
+    FROM source r
+- phase: pre
+  derive:
+    field: system
+    sql: '''meta_ads'''
+
+materialization:
+  strategy: append
+  fact:
+    type: transaction
+
+source:
+  type: table
+  path: table:{domain_catalog}.{silver_layer}_meta_ads_campaigns
+  load_mode: incremental
+  watermark_field: _lakelogic_processed_at
+
+metadata:
+  run_log_table: '{domain_catalog}.lakelogic_run_log'
