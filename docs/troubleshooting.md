@@ -11,7 +11,7 @@ unable to locate bundle root: databricks.yml not found
 Run every `databricks bundle` command from the repository's `platform/databricks/` directory:
 
 ```bash
-cd lakelogic-databricks-lakehouse/platform/databricks
+cd lakelogic-rideflow-databricks-governed-lakehouse/platform/databricks
 ls databricks.yml
 ```
 
@@ -83,9 +83,11 @@ Typical causes are missing `CREATE CATALOG` permission or a workspace using Defa
 
 Use one of these approaches:
 
-1. In Databricks, open **Catalog > Create catalog**, create `rideflow_dev_platform` with Default Storage, and rerun setup.
-2. Reuse a writable existing catalog such as `workspace` and update the repository configuration as described in [Catalog configuration](catalog-configuration.md).
-3. Ask an administrator to create the catalog and grant the required permissions.
+1. Set the `catalog_storage_root` bundle variable to a storage location setup can use, then rerun setup.
+2. In Databricks, open **Catalog > Create catalog** and create the `rideflow_dev_<domain>` catalogs yourself, then rerun setup. Setup reuses catalogs that already exist.
+3. Ask an administrator to create the catalogs and grant the required permissions.
+
+To use other catalog names, see [Catalog configuration](catalog-configuration.md).
 
 ## Workspace ID mismatch
 
@@ -119,25 +121,24 @@ Remove both resource groups:
 
 ```bash
 databricks bundle destroy -t dev -p rideflow_dev
-for domain in marketing marketplace operations payments reference shared; do
+for domain in business marketing marketplace operations payments reference shared; do
   databricks catalogs delete "rideflow_dev_${domain}" --force -p rideflow_dev
 done
-databricks catalogs delete rideflow_dev_platform --force -p rideflow_dev
 ```
 
-If jobs or files remain because the bundle state was reset or provisioning used the notebook path, remove them explicitly.
+If jobs or files remain because the bundle state was reset, remove them explicitly.
 
-Workspace files:
+Workspace files, under the bundle's `workspace.root_path` from `databricks.yml`:
 
 ```bash
-databricks workspace delete /Workspace/Shared/_data_platform_rideflow_demo --recursive -p rideflow_dev
+databricks workspace delete /Workspace/Shared/lakelogic-rideflow-databricks-governed-lakehouse/dev --recursive -p rideflow_dev
 ```
 
-List the jobs carrying the `lakelogic` tag, then delete the returned job IDs:
+List the jobs whose names start with `[dev] pl_`, then delete the returned job IDs:
 
 ```bash
 databricks jobs list --output json -p rideflow_dev \
-  | jq -r '.[] | select(.settings.tags.lakelogic != null) | .job_id'
+  | jq -r '.[] | select(.settings.name | startswith("[dev] pl_")) | .job_id'
 
 databricks jobs delete <job-id> -p rideflow_dev
 ```

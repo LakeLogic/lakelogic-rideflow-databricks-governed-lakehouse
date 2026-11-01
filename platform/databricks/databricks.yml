@@ -14,8 +14,8 @@ sync:
 
 variables:
   catalog:
-    description: 'The catalog prefix: each domain''s catalog is <prefix>_<domain>
-      (from the deployment target).'
+    description: Passed to the notebooks as the target's catalog. Domain catalog names
+      come from each _system.yaml (domain_catalog_prefix), not from this.
     default: rideflow_dev
   landing_storage_root:
     description: Optional external storage for the landing Volumes (<root>/landing_<domain>). Blank
