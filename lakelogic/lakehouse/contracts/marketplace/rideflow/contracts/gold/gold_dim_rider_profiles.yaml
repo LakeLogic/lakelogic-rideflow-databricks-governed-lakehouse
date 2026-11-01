@@ -3,12 +3,7 @@ version: 1.0.0
 info:
   title: Gold — Dim Rider Profiles
   target_layer: gold
-  description: The table contains detailed profiles of riders on the platform, including
-    their unique identifiers, location details, preferred payment methods, signup
-    dates, account statuses, and timestamps of the last profile updates. It also records
-    the source system of each rider's data to support integration and lineage tracking.
-    The data is structured to ensure consistency and enable monitoring of changes
-    over time.
+  description: 'grain: one row per rider'
   table_name: '{gold_layer}_dim_rider_profiles'
   system: rideflow
   domain: marketplace

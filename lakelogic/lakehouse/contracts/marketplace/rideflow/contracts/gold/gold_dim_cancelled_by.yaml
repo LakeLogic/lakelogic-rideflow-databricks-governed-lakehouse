@@ -3,12 +3,7 @@ version: 1.0.0
 info:
   title: Gold — Dim Cancelled By
   target_layer: gold
-  description: The table records the entity responsible for cancelling each ride,
-    capturing who initiated the cancellation to provide context and ensure traceability.
-    It includes the unique identifier for the cancelling entity and notes the system
-    of origin to support data lineage tracking. The data comes from the rideflow system,
-    focusing on maintaining data integrity and explaining cancellation events within
-    the marketplace.
+  description: 'grain: one row per cancelled_by'
   table_name: '{gold_layer}_dim_cancelled_by'
   system: rideflow
   domain: marketplace
@@ -23,8 +18,8 @@ model:
   - name: cancelled_by
     type: string
     required: true
-    description: The entity or user responsible for cancelling the ride, providing
-      context for the cancellation event.
+    description: Indicates whether the cancellation was initiated by the rider or
+      the driver, helping to understand cancellation trends and reasons.
   - name: system
     type: string
     required: true

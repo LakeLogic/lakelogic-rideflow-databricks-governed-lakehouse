@@ -2,17 +2,17 @@ version: 1.0.0
 
 info:
   title: Bronze — Hubspot Email Campaigns
-  target_layer: bronze
   description: The table records each time an email campaign was sent from Hubspot,
     capturing the recipient's email address and name alongside the campaign details
     such as the campaign name, subject line, and timestamps for when the email was
     sent, opened, or clicked, as well as whether it bounced or led to an unsubscribe
     action. It includes personal data in the form of recipient email addresses. The
     data originates from the Hubspot marketing system's tracking of email campaign
-    performance.
-  table_name: '{bronze_layer}_hubspot_email_campaigns'
+    performance. Supersede test A.
+  target_layer: bronze
   domain: marketing
   system: hubspot
+  table_name: '{bronze_layer}_hubspot_email_campaigns'
 
 model:
   fields:

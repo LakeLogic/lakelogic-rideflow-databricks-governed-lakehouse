@@ -3,10 +3,7 @@ version: 1.0.0
 info:
   title: Gold — Dim Cancel Reason Code
   target_layer: gold
-  description: The table holds standardized codes that describe why a ride was canceled,
-    along with a unique identifier for each code and the originating system. It comes
-    from the rideflow system and is designed to ensure data consistency and support
-    analysis of cancellation trends across the marketplace domain.
+  description: 'grain: one row per cancel_reason_code'
   table_name: '{gold_layer}_dim_cancel_reason_code'
   system: rideflow
   domain: marketplace
@@ -21,8 +18,8 @@ model:
   - name: cancel_reason_code
     type: string
     required: true
-    description: The specific code representing the reason a ride was canceled, used
-      for analysis and reporting.
+    description: Code representing the reason for the cancellation, used for categorizing
+      and analyzing cancellation causes.
   - name: system
     type: string
     required: true
