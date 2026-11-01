@@ -1,8 +1,0 @@
-# Written by LakeLogic on every delivery. It names the LakeLogic project this repository
-# was delivered from, so "Upgrade a LakeLogic estate" can continue that project.
-# It holds no secret. Keep it, or the next upgrade starts a new project.
-schema: lakelogic.project/v1
-project_id: snap-7ca870d1dda142db
-project_name: "RideFlow \u2014 Trip & Revenue Analytics (copy)"
-revision: chv1:2fc51b81bdf6952ee34e50711d632f4547e2880e5e610273bc83991ae7f38f50
-snapshot: snap-7ca870d1dda142db
