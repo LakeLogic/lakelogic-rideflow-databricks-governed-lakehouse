@@ -49,8 +49,7 @@ materialization:
     format: delta
     merge_dedup_guard: true
   gold:
-    # Shared products are recomputed in full from other domains' silver on each run.
-    strategy: overwrite
+    strategy: merge
     format: delta
 
 server:

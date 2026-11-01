@@ -10,7 +10,7 @@ Detailed examples and repository layout for the RideFlow reference lakehouse.
 
 ```text
 RideFlow · one Databricks lakehouse (Unity Catalog) · 7 domains · 14 source systems plus Shared
-Source-processing domains use the medallion pattern — Bronze (raw, all-string, schema-flexible) → Silver (typed, cleaned, transformed, validated) → Gold (products)
+Source-processing domains use the medallion pattern: Bronze (raw, all-string, schema-flexible) → Silver (typed, cleaned, transformed, validated) → Gold (products)
 │
 ├── Marketplace   (rideflow)                          ← shown expanded as the example
 │   ├── Bronze   raw · all-string · schema-flexible (evolves, keeps everything)
@@ -24,14 +24,18 @@ Source-processing domains use the medallion pattern — Bronze (raw, all-string,
 │         fact_trip_completed · fact_trip_requests · fact_trip_cancellations
 │         fact_driver_telemetry · fact_rider_app_events
 │
-├── Payments     (stripe)        →  Bronze → Silver → Gold   ·  charges, payouts
-├── Operations   (checkr · twilio · zendesk)   →  Bronze → Silver → Gold
-├── Marketing    (google_ads · google_analytics · hubspot · meta_ads)   →  Bronze → Silver → Gold
+├── Payments     (stripe · driver_expenses)                       →  Bronze → Silver → Gold
+├── Operations   (checkr · onboarding · trust_safety · twilio · zendesk)   →  Bronze → Silver → Gold
+├── Marketing    (google_ads · google_analytics · hubspot · meta_ads)      →  Bronze → Silver → Gold
+├── Business     (salesforce)                                    →  Bronze → Silver → Gold
 ├── Reference    (internal)      →  Bronze → Silver → Gold   ·  cities, fx rates
 └── Shared       (cross-domain marts)   →  Gold   ·  products that join every domain
 ```
 
-![RideFlow governed data mesh architecture](images/rideflow_governed_data_mesh_architecture.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/rideflow_architecture_dark.png">
+  <img alt="RideFlow architecture: domains publish data products into per-domain Unity Catalog catalogs, governed by contracts as code" src="images/rideflow_architecture_light.png">
+</picture>
 
 *Seven RideFlow domains publish governed data products through Unity Catalog. LakeLogic Core applies
 the shared contract controls and records quarantine and run evidence.*
@@ -88,35 +92,33 @@ surrogate keys, effective dates, current-version flags, and an unknown member.
 ## What gets created
 
 ```text
-Platform catalog: rideflow_dev_platform
-└── nondelta
-    ├── _contracts       Unity Catalog Volume containing the staged registry
-    └── _logs            Unity Catalog Volume containing pipeline run logs
-
 One catalog per domain: rideflow_dev_<domain>
-├── files                Volumes; `landing` holds the inbound source files
+├── files                Volumes: `landing` (inbound source files) and `lakelogic_logs` (run logs)
 ├── bronze               Bronze Delta tables
 ├── silver               Silver Delta tables
 ├── gold                 Gold Delta tables
 ├── quarantine           Contract-failing rows
-└── lakelogic            Run log, SLO results, retention and erasure records
+└── lakelogic            Run log, SLO results, retention and erasure evidence
 
 Domains: marketplace, marketing, payments, operations, business,
          reference (shared lookups and conformed dimensions),
          shared (cross-domain marts; gold only)
 ```
 
+There is no separate platform catalog. Each `_system.yaml` sets its own table,
+landing and log locations. The jobs read contracts from the workspace files the
+bundle syncs, at `${workspace.file_path}/contracts`.
+
 ## Repository layout
 
 The repository keeps reusable data-product definitions separate from the code
 that deploys and runs them on Databricks:
 
-![LakeLogic Databricks data mesh repository layout](images/repository_layout.png)
-
 ```text
 .github/
   workflows/validate.yml      CI validation for contracts and Python files
 contracts/             Domain-owned contract trees
+  business/                   Salesforce
   marketing/                  Google Ads, Google Analytics, HubSpot, and Meta Ads
     <system>/
       _system.yaml             System defaults and contract registry
@@ -125,32 +127,32 @@ contracts/             Domain-owned contract trees
         silver/                Cleaned and conformed data products
         gold/                  Business-facing facts, dimensions, and aggregates
   marketplace/                Trips, riders, drivers, telemetry, and pricing
-  operations/                 Screening, support, licensing, and operations data
-  payments/                   Charges, refunds, payouts, and financial products
+  operations/                 Checkr, onboarding, trust and safety, Twilio, and Zendesk
+  payments/                   Stripe and driver expenses
   reference/                  Shared lookups and conformed reference data
   shared/                     Cross-domain products and marts
 platform/databricks/
-  databricks.yml              Asset Bundle targets
-  databrick_variables.yml     Shared bundle variables
+  databricks.yml              Asset Bundle variables, sync paths and targets
   deploy.ps1 / deploy.sh      Windows and Unix deployment wrappers
   notebooks/
-    nb_00_setup.py            Catalog, schema, Volume, and contract setup
+    nb_00_setup.py            Catalog, schema and Volume setup from the registries
     nb_pipeline_driver.py     Registry-driven Bronze, Silver, and Gold runner
     nb_test_data_driver.py    Synthetic landing-data generator
     nb_slo_checks.py          Service-level (freshness / row-count) checks
     nb_maintenance_optimize.py  Delta OPTIMIZE + VACUUM
     nb_compliance_retention_check.py  Read-only retention check
     nb_compliance_erasure.py  Data-subject erasure tooling, dry run by default
-    _ops/                     Run gates and smoke tests (nb_assert_*, nb_release_smoke_test)
-    _helpers/                 Inspection and validation helpers
   resources/                  Jobs, grouped as LakeLogic Build Centre renders them
-    admin/                    pl_admin_setup (one-click bootstrap), pl_admin_maintenance_<domain>_<system>
-    data/                     pl_data_00_mesh_orchestrator, pl_data_<domain>_<system>_{bronze,silver,gold,orchestrator}
-    monitor/                  pl_monitor_slo_<domain>_<system>
+    admin/                    pl_admin_setup, pl_admin_maintenance
+    data/                     pl_data_00_mesh_orchestrator (setup, seed, then every system),
+                              pl_data_<domain>_<system> (bronze, silver and gold tasks)
+    monitor/                  pl_monitor_slo
     privacy/                  pl_privacy_retention, pl_privacy_erasure
-    test/                     pl_test_synthetic_seed (all domains), pl_test_synthetic_seed_<domain>_<system>
+    test/                     pl_test_synthetic_seed (every system that ingests files)
+  tests/                      Bundle structure tests
 docs/                         Alternative setup and troubleshooting guides
   images/                     README screenshots and architecture diagrams
+platform/reports/             Power BI reports and semantic models
 platform/scripts/
   validate_release.py         Static checks used locally and in CI
 README.md                     Public overview and quickstart

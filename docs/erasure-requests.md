@@ -6,21 +6,47 @@
 > scope before processing real requests. A dry run is not completed erasure,
 > and lakehouse evidence does not establish deletion from sources or backups.
 
-File a request as a row in the domain's `_lakelogic_erasure_requests` table
-(created by setup), then run `pl_privacy_erasure`. LakeLogic owns the
-`status`, `processed_at` and `run_id` columns.
+`pl_privacy_erasure` runs `nb_compliance_erasure.py` once per system. You pass
+the subjects as job parameters. There is no request table.
 
-```sql
-INSERT INTO rideflow_dev_payments.lakelogic._lakelogic_erasure_requests
-  (request_id, framework, subject_column, subject_id, requested_at, requested_by, reason, status, system)
-VALUES
-  ('DSR-2026-001', 'gdpr', 'customer_id', 'cus_123', current_timestamp(), 'privacy@rideflow.example',
-   'Art. 17 request', 'pending', 'stripe');
+| Parameter | Meaning |
+| --- | --- |
+| `subject_column` | The column that identifies a data subject, for example `rider_id` |
+| `subject_ids` | Comma-separated IDs |
+| `subject_ids_file` | Or an absolute Volume path to a file with one ID per line |
+| `strategy` | `nullify` (default), `hash` or `redact`, used when a contract declares none |
+| `hash_salt` | Salt for the `hash` strategy |
+| `entity_filter` | Comma-separated entities. Blank means every contract |
+| `dry_run` | `true` by default |
+| `confirm` | Must be exactly `ERASE` to change data |
+| `case_ref` | The request this answers, for example a ticket ID |
+
+Only contracts that declare personal-data fields and contain `subject_column` are touched.
+
+## Plan first
+
+Run with the defaults to plan. A dry run counts matching rows in each table and
+records the outcome `planned`. Nothing is changed.
+
+```bash
+databricks bundle run erasure -t dev -p rideflow_dev \
+  --params subject_column=rider_id,subject_ids=rid_123
 ```
 
-With `gdpr_ids` and `hipaa_ids` blank, each system task erases its open requests
-and marks them `completed` or `failed`. The job runs dry by default: a dry run marks
-requests `dry_run` and leaves them open, so the next run with `dry_run=false` erases
-them. Each `_lakelogic_erasure_evidence` row carries the request id in `reason`.
-Set `system` so only that system's task takes the request; if it is left blank,
-the first task to run closes it for the whole domain.
+## Apply
+
+Data changes only when all three are set: `dry_run=false`, `confirm=ERASE` and a
+non-empty `case_ref`.
+
+- `dry_run=false` without `confirm=ERASE` records `not_run` and fails the task.
+- `dry_run=false` and `confirm=ERASE` without `case_ref` fails before any change.
+
+After applying `nullify` or `redact`, the notebook checks whether matching rows
+still hold personal data. If any do, it records `incomplete` and fails the task.
+
+## Evidence
+
+Each run writes rows to `lakelogic_erasure_evidence`, beside the domain's
+`lakelogic_run_log`. A row records the table, outcome, matched rows, strategy,
+mode and `case_ref`. Subject IDs are never stored. The run records their count
+and a SHA-256 digest instead, so you can match it to the request's own ID list.
