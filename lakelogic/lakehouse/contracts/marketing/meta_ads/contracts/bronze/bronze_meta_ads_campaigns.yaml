@@ -2,15 +2,15 @@ version: 1.0.0
 
 info:
   title: Bronze — Meta Ads Campaigns
-  target_layer: bronze
   description: The table captures detailed performance metrics for individual advertising
     campaigns and ad sets from Meta Ads, including essential identifiers, engagement
     statistics like impressions, clicks, and conversions, along with financial data
     such as spend and currency, enabling comprehensive tracking and analysis of campaign
-    effectiveness over time.
-  table_name: '{bronze_layer}_meta_ads_campaigns'
+    effectiveness over time. Updated after delivery.
+  target_layer: bronze
   domain: marketing
   system: meta_ads
+  table_name: '{bronze_layer}_meta_ads_campaigns'
 
 model:
   fields:

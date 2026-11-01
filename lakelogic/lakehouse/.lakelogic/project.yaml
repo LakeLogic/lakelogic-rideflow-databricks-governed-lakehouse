@@ -4,5 +4,6 @@
 schema: lakelogic.project/v1
 project_id: snap-7ca870d1dda142db
 project_name: "RideFlow \u2014 Trip & Revenue Analytics (copy)"
-revision: chv1:2fc51b81bdf6952ee34e50711d632f4547e2880e5e610273bc83991ae7f38f50
+revision: chv1:e01e52e74ec21619a605f6c839626aedec389bd21a766e4a03cb1f123d9a7a96
+seal: sha256:6796e5eb2ca6cec1cdf9030de3517c84555a52be6f578e7c9eecfacb1cac7369
 snapshot: snap-7ca870d1dda142db
