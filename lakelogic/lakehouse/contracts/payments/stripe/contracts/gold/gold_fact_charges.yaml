@@ -1,0 +1,101 @@
+version: 1.0.0
+
+info:
+  title: Gold — Fact Charges
+  target_layer: gold
+  description: 'grain: one row per charge'
+  table_name: '{gold_layer}_fact_charges'
+  system: stripe
+  domain: payments
+
+model:
+  fields:
+  - name: charge_id
+    type: string
+    required: true
+    description: Unique identifier for the Stripe charge, used to reference and track
+      each payment transaction.
+  - name: total_amount
+    type: float
+    required: false
+  - name: trip_id
+    type: string
+    required: false
+    description: Identifier for the trip associated with the payment, connecting the
+      charge to a specific service provided.
+  - name: currency
+    type: string
+    required: false
+    description: The currency in which the charge was made, important for financial
+      reporting and conversions.
+  - name: status
+    type: string
+    required: false
+    description: The current status of the charge (e.g., succeeded, failed), indicating
+      the success of the payment process.
+  - name: payment_method_type
+    type: string
+    required: false
+    description: The type of payment method used (e.g., card, digital wallet), helping
+      categorize payment transactions.
+  - name: created_at
+    type: timestamp
+    required: false
+    description: The timestamp indicating when the charge was created, essential for
+      tracking and auditing purposes.
+  - name: created_date
+    type: date
+    required: false
+    description: 'Partition column: the calendar date of `created_at`.'
+  - name: system
+    type: string
+    required: true
+    description: Source system this row came from
+
+dataset: gold_fact_charges
+
+primary_key:
+- charge_id
+
+quality:
+  dataset_rules:
+  - unique:
+      columns:
+      - charge_id
+      name: charge_id_unique
+      category: uniqueness
+      description: No two rows share the same charge_id.
+
+transformations:
+- phase: pre
+  sql: |-
+    SELECT
+      r.charge_id,
+      r.trip_id,
+      r.currency,
+      r.status,
+      r.payment_method_type,
+      r.created_at,
+      r.amount AS total_amount,
+      CAST(r.created_at AS DATE) AS created_date
+    FROM source r
+- phase: pre
+  derive:
+    field: system
+    sql: '''stripe'''
+
+materialization:
+  strategy: append
+  fact:
+    type: transaction
+  partition_by:
+  - created_date
+
+source:
+  type: table
+  path: table:{domain_catalog}.{silver_layer}_stripe_charges
+  load_mode: incremental
+  watermark_field: _lakelogic_processed_at
+
+metadata:
+  run_log_table: '{domain_catalog}.lakelogic_run_log'

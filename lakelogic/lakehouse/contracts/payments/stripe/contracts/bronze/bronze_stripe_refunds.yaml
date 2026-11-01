@@ -1,0 +1,60 @@
+version: 1.0.0
+
+info:
+  title: Bronze — Stripe Refunds
+  target_layer: bronze
+  description: The table records financial refunds processed through Stripe, capturing
+    essential details such as the refund amount and currency, the status of each refund,
+    and the reasons behind them. It links each refund to the original charge and the
+    associated rider, providing traceability and context for customer service and
+    financial reporting. The data originates from Stripe's payment processing system,
+    reflecting real-time refund transactions.
+  table_name: '{bronze_layer}_stripe_refunds'
+  domain: payments
+  system: stripe
+
+model:
+  fields:
+  - name: refund_id
+    type: string
+    description: Unique identifier for the refund transaction, essential for tracking
+      and referencing specific refund actions.
+  - name: charge_id
+    type: string
+    description: Identifier linking the refund to the original charge, enabling traceability
+      back to the payment transaction.
+  - name: rider_id
+    type: string
+    description: Identifier for the rider associated with the refund, used for linking
+      refunds to specific service providers or users.
+  - name: amount
+    type: float
+    description: Monetary value of the refund, indicating the amount being returned
+      to the customer.
+  - name: currency
+    type: string
+    description: Currency in which the refund is processed, important for financial
+      reporting and multi-currency transactions.
+  - name: status
+    type: string
+    description: Current state of the refund process, indicating whether it is succeeded,
+      failed, or pending.
+  - name: reason
+    type: string
+    description: Reason provided by Stripe for the refund, offering insight into why
+      the refund was issued.
+  - name: refund_reason
+    type: string
+    description: Custom or detailed reason for the refund as recorded by the business,
+      supporting internal analysis and customer service.
+  - name: created_at
+    type: timestamp
+    description: Timestamp indicating when the refund was initiated, crucial for auditing
+      and time-based analysis.
+
+source:
+  type: landing
+  path: '{landing_root}/refunds'
+  load_mode: full
+
+dataset: bronze_stripe_refunds

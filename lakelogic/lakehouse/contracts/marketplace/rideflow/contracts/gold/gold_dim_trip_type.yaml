@@ -1,0 +1,83 @@
+version: 1.0.0
+
+info:
+  title: Gold — Dim Trip Type
+  target_layer: gold
+  description: The table holds unique categories of trips available in the marketplace,
+    such as standard, express, or shared rides, each identified by a consistent hash-based
+    key for reliable referencing. It includes the origin system of each trip type
+    to support data lineage tracking and ensure accurate cross-system references.
+    The entries use a special identifier of '-1' to denote unknown or unclassified
+    trip types.
+  table_name: '{gold_layer}_dim_trip_type'
+  system: rideflow
+  domain: marketplace
+
+model:
+  fields:
+  - name: trip_type_sk
+    type: string
+    required: false
+    description: 'Surrogate key: sha256 of the business key, written by the materializer;
+      ''-1'' is the unknown member.'
+  - name: trip_type
+    type: string
+    required: true
+    description: The type of trip offered or recorded in the marketplace, such as
+      'standard', 'express', or 'shared'. This categorizes the nature of the ride
+      or service provided.
+  - name: system
+    type: string
+    required: true
+    description: Source system this row came from
+
+dataset: gold_dim_trip_type
+
+primary_key:
+- trip_type
+
+quality:
+  dataset_rules:
+  - unique:
+      columns:
+      - trip_type
+      name: trip_type_unique
+      category: uniqueness
+      description: No two rows share the same trip_type.
+
+materialization:
+  scd1:
+    surrogate_key: trip_type_sk
+    surrogate_key_strategy: hash
+    unknown_member:
+      enabled: true
+      surrogate_key_value: '-1'
+
+links:
+- name: silver_rideflow_trips
+  type: table
+  path: table:{domain_catalog}.{silver_layer}_rideflow_trips
+
+transformations:
+- phase: pre
+  sql: |-
+    SELECT DISTINCT trip_type
+    FROM (
+      SELECT trip_type FROM source
+      UNION ALL
+      SELECT trip_type FROM silver_rideflow_trips
+    ) codes
+    WHERE trip_type IS NOT NULL
+- phase: pre
+  derive:
+    field: system
+    sql: '''rideflow'''
+
+source:
+  type: table
+  path: table:{domain_catalog}.{silver_layer}_rideflow_trip_requests
+  load_mode: incremental
+  watermark_field: _lakelogic_processed_at
+
+metadata:
+  run_log_table: '{domain_catalog}.lakelogic_run_log'

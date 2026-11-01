@@ -1,0 +1,87 @@
+version: 1.0.0
+
+info:
+  title: Bronze — Google Analytics Sessions
+  target_layer: bronze
+  description: The table holds session-level data collected from Google Analytics,
+    including user identifiers, IP addresses, session timing, page views, traffic
+    sources, device categories, and geographic locations. It captures raw, unprocessed
+    interaction metrics that help analyze user behavior and traffic patterns across
+    different regions and devices. The data includes personal identifiers such as
+    IP addresses, reflecting its sensitive nature and the need for careful handling.
+  table_name: '{bronze_layer}_google_analytics_sessions'
+  domain: marketing
+  system: google_analytics
+
+model:
+  fields:
+  - name: session_id
+    type: string
+    description: Unique identifier for a user session, allowing analysis of individual
+      user interactions.
+  - name: user_pseudo_id
+    type: string
+    description: Pseudonymous identifier for a user, used when a persistent user ID
+      isn't available.
+  - name: user_id
+    type: string
+    description: Permanent identifier for a user, if available, enabling long-term
+      tracking across sessions.
+  - name: ip_address
+    type: string
+    pii: true
+    classification: ip_address
+    description: 'IP address of the user, providing geographic and network context
+      (note: this is personal data).'
+  - name: session_start
+    type: string
+    description: Timestamp indicating when the session began, crucial for time-based
+      analysis.
+  - name: session_duration_seconds
+    type: integer
+    description: Length of the session in seconds, measuring user engagement.
+  - name: page_views
+    type: string
+    description: Count of pages viewed during the session, indicating depth of interaction.
+  - name: traffic_source
+    type: string
+    description: Origin of the traffic (e.g., search engine, social media), helping
+      to evaluate channel effectiveness.
+  - name: traffic_medium
+    type: string
+    description: Type of traffic medium (e.g., organic, referral), detailing how users
+      arrived at the site.
+  - name: traffic_campaign
+    type: string
+    description: Specific marketing campaign associated with the traffic, supporting
+      campaign performance analysis.
+  - name: device_category
+    type: string
+    description: Category of device used (e.g., mobile, desktop, tablet), informing
+      UX and targeting strategies.
+  - name: geo_country
+    type: string
+    description: Country where the user is located, enabling geographic-based analysis
+      and targeting.
+  - name: landing_page
+    type: string
+    description: First page visited in the session, useful for assessing entry points
+      and optimizing landing pages.
+
+source:
+  type: landing
+  path: '{landing_root}/sessions'
+  load_mode: full
+
+quality:
+  row_rules:
+  - name: geo_country_partition_not_null
+    sql: geo_country IS NOT NULL
+    category: completeness
+    description: geo_country is always present (never null).
+
+materialization:
+  partition_by:
+  - geo_country
+
+dataset: bronze_google_analytics_sessions

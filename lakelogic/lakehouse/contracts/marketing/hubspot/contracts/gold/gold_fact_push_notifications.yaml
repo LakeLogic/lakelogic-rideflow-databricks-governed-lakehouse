@@ -1,0 +1,104 @@
+version: 1.0.0
+
+info:
+  title: Gold — Fact Push Notifications
+  target_layer: gold
+  description: 'grain: one row per push notification event'
+  table_name: '{gold_layer}_fact_push_notifications'
+  system: hubspot
+  domain: marketing
+
+model:
+  fields:
+  - name: notification_id
+    type: string
+    required: true
+    description: Unique identifier for the push notification sent through Hubspot,
+      used to track and reference each individual message.
+  - name: device_token
+    type: string
+    required: false
+    description: Token representing the device (e.g., mobile phone) that the push
+      notification was sent to, enabling targeted delivery.
+  - name: campaign_name
+    type: string
+    required: false
+    description: Name of the marketing campaign associated with the push notification,
+      helping to categorize and analyze campaign performance.
+  - name: platform
+    type: string
+    required: false
+    description: Platform (e.g., iOS, Android) on which the push notification was
+      delivered, useful for analyzing delivery and engagement metrics across different
+      devices.
+  - name: sent_at
+    type: timestamp
+    required: false
+    description: Timestamp indicating when the push notification was dispatched from
+      Hubspot to the rider's device.
+  - name: delivered_at
+    type: timestamp
+    required: false
+    description: Timestamp showing when the push notification was successfully delivered
+      to the rider's device.
+  - name: opened_at
+    type: timestamp
+    required: false
+    description: Timestamp capturing when the rider opened the push notification,
+      indicating engagement with the message.
+  - name: delivered_date
+    type: date
+    required: false
+    description: 'Partition column: the calendar date of `delivered_at`.'
+  - name: system
+    type: string
+    required: true
+    description: Source system this row came from
+
+dataset: gold_fact_push_notifications
+
+primary_key:
+- notification_id
+
+quality:
+  dataset_rules:
+  - unique:
+      columns:
+      - notification_id
+      name: notification_id_unique
+      category: uniqueness
+      description: No two rows share the same notification_id.
+
+transformations:
+- phase: pre
+  sql: |-
+    SELECT
+      r.notification_id,
+      r.device_token,
+      r.campaign_name,
+      r.platform,
+      r.sent_at,
+      r.delivered_at,
+      r.opened_at,
+      CAST(r.delivered_at AS DATE) AS delivered_date
+    FROM source r
+- phase: pre
+  derive:
+    field: system
+    sql: '''hubspot'''
+
+materialization:
+  strategy: append
+  fact:
+    type: factless
+  partition_by:
+  - delivered_date
+
+source:
+  type: table
+  path: table:{domain_catalog}.{silver_layer}_hubspot_push_notifications
+  load_mode: incremental
+  watermark_field: _lakelogic_processed_at
+
+metadata:
+  run_log_table: '{domain_catalog}.lakelogic_run_log'

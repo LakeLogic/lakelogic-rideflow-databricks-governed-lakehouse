@@ -1,0 +1,72 @@
+version: 1.0.0
+
+info:
+  title: Gold — Dim Rider Profiles Status
+  target_layer: gold
+  description: The table holds the current status of rider profiles, indicating whether
+    they are active, inactive, or pending, along with the system of origin for each
+    status record to support reliable joins and lookups across the data model. The
+    data comes from the rideflow system, capturing essential rider profile states
+    for marketplace operations.
+  table_name: '{gold_layer}_dim_rider_profiles_status'
+  system: rideflow
+  domain: marketplace
+
+model:
+  fields:
+  - name: status_sk
+    type: string
+    required: false
+    description: 'Surrogate key: sha256 of the business key, written by the materializer;
+      ''-1'' is the unknown member.'
+  - name: status
+    type: string
+    required: true
+    description: The current status of the rider profile, indicating their active,
+      inactive, or pending state.
+  - name: system
+    type: string
+    required: true
+    description: Source system this row came from
+
+dataset: gold_dim_rider_profiles_status
+
+primary_key:
+- status
+
+quality:
+  dataset_rules:
+  - unique:
+      columns:
+      - status
+      name: status_unique
+      category: uniqueness
+      description: No two rows share the same status.
+
+materialization:
+  scd1:
+    surrogate_key: status_sk
+    surrogate_key_strategy: hash
+    unknown_member:
+      enabled: true
+      surrogate_key_value: '-1'
+
+transformations:
+- phase: pre
+  sql: |-
+    SELECT DISTINCT status
+    FROM source
+    WHERE status IS NOT NULL
+- phase: pre
+  derive:
+    field: system
+    sql: '''rideflow'''
+
+source:
+  type: table
+  path: table:{domain_catalog}.{silver_layer}_rideflow_rider_profiles
+  load_mode: incremental
+  watermark_field: _lakelogic_processed_at
+
+metadata:
+  run_log_table: '{domain_catalog}.lakelogic_run_log'

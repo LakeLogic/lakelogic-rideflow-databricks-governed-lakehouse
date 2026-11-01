@@ -1,0 +1,93 @@
+version: 1.0.0
+
+info:
+  title: Gold — Dim Cities
+  target_layer: gold
+  description: 'grain: one row per city'
+  table_name: '{gold_layer}_dim_cities'
+  system: internal
+  domain: reference
+
+model:
+  fields:
+  - name: cities_sk
+    type: string
+    required: false
+    description: 'Surrogate key: sha256 of the business key, written by the materializer;
+      ''-1'' is the unknown member.'
+  - name: city_code
+    type: string
+    required: true
+    description: Unique identifier for the city used internally for referencing and
+      processing.
+  - name: city_name
+    type: string
+    required: false
+    description: Full name of the city for identification and display purposes.
+  - name: country_code
+    type: string
+    required: false
+    description: Code representing the country the city belongs to, used for regional
+      grouping and analysis.
+  - name: default_currency
+    type: string
+    required: false
+    description: Default currency used in the city for financial transactions and
+      reporting.
+  - name: geofence_wkt
+    type: string
+    required: false
+    description: Geospatial boundary definition of the city used for location-based
+      services and analytics.
+  - name: is_active
+    type: boolean
+    required: false
+    description: Boolean flag indicating whether the city is currently active and
+      available within the system.
+  - name: launched_at
+    type: timestamp
+    required: false
+    description: Timestamp indicating when the city was added to the system, tracking
+      system coverage over time.
+  - name: sunset_at
+    type: timestamp
+    required: false
+    description: Timestamp indicating when the city will be removed or deactivated
+      from the system.
+  - name: timezone
+    type: string
+    required: false
+    description: Timezone of the city to manage time-related data accurately across
+      different regions.
+  - name: system
+    type: string
+    required: true
+    description: Source system this row came from
+
+dataset: gold_dim_cities
+
+primary_key:
+- city_code
+
+materialization:
+  scd1:
+    surrogate_key: cities_sk
+    surrogate_key_strategy: hash
+    unknown_member:
+      enabled: true
+      surrogate_key_value: '-1'
+
+source:
+  type: table
+  path: table:{domain_catalog}.{silver_layer}_internal_cities
+  load_mode: incremental
+  watermark_field: _lakelogic_processed_at
+
+metadata:
+  run_log_table: '{domain_catalog}.lakelogic_run_log'
+
+transformations:
+- phase: pre
+  derive:
+    field: system
+    sql: '''internal'''

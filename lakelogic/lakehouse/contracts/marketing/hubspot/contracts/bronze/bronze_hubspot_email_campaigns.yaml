@@ -1,0 +1,65 @@
+version: 1.0.0
+
+info:
+  title: Bronze — Hubspot Email Campaigns
+  target_layer: bronze
+  description: The table records each time an email campaign was sent from Hubspot,
+    capturing the recipient's email address and name alongside the campaign details
+    such as the campaign name, subject line, and timestamps for when the email was
+    sent, opened, or clicked, as well as whether it bounced or led to an unsubscribe
+    action. It includes personal data in the form of recipient email addresses. The
+    data originates from the Hubspot marketing system's tracking of email campaign
+    performance.
+  table_name: '{bronze_layer}_hubspot_email_campaigns'
+  domain: marketing
+  system: hubspot
+
+model:
+  fields:
+  - name: campaign_id
+    type: string
+    description: Unique identifier for the email campaign, used to track and correlate
+      campaign performance.
+  - name: recipient_email
+    type: string
+    pii: true
+    classification: email
+    description: Email address of the recipient, essential for personalization and
+      communication.
+  - name: recipient_name
+    type: string
+    description: Name of the recipient, used for personalized messaging and tracking.
+  - name: campaign_name
+    type: string
+    description: Name of the email campaign, helps in identifying and organizing marketing
+      efforts.
+  - name: subject_line
+    type: string
+    description: Subject line of the email, crucial for determining open rates and
+      engagement.
+  - name: sent_at
+    type: timestamp
+    description: Timestamp indicating when the email was sent to the recipient.
+  - name: opened_at
+    type: timestamp
+    description: Timestamp indicating when the recipient opened the email, useful
+      for measuring engagement.
+  - name: clicked_at
+    type: timestamp
+    description: Timestamp indicating when the recipient clicked a link within the
+      email, indicating interest.
+  - name: bounced
+    type: boolean
+    description: Boolean indicating whether the email bounced, important for understanding
+      delivery issues.
+  - name: unsubscribed
+    type: boolean
+    description: Boolean indicating whether the recipient unsubscribed after receiving
+      the email, important for managing opt-outs.
+
+source:
+  type: landing
+  path: '{landing_root}/email_campaigns'
+  load_mode: full
+
+dataset: bronze_hubspot_email_campaigns

@@ -1,0 +1,109 @@
+version: 1.0.0
+
+info:
+  title: Bronze — Zendesk Support Tickets
+  target_layer: bronze
+  description: The table holds support ticket details from Zendesk, capturing essential
+    information such as unique identifiers for tickets, associated riders, trips,
+    drivers, and charges, along with requester contact details, issue descriptions,
+    statuses, priorities, and timestamps for creation, updates, and resolution. It
+    includes personal data like email addresses and phone numbers, as well as satisfaction
+    ratings provided by customers after issue resolution. The data originates from
+    the Zendesk support system, reflecting customer interactions and support operations.
+  table_name: '{bronze_layer}_zendesk_support_tickets'
+  domain: operations
+  system: zendesk
+
+model:
+  fields:
+  - name: ticket_id
+    type: string
+    description: Unique identifier for the support ticket, essential for tracking
+      and referencing specific issues.
+  - name: entry_point
+    type: string
+    description: Indicates where the support ticket was submitted, helping to understand
+      customer behavior and channel effectiveness.
+  - name: rider_id
+    type: string
+    description: Identifier for the rider associated with the ticket, linking support
+      issues to specific customers.
+  - name: trip_id
+    type: string
+    description: Identifier for the trip related to the ticket, connecting support
+      issues to specific transactions.
+  - name: driver_id
+    type: string
+    description: Identifier for the driver involved in the ticket, relevant for assigning
+      responsibility or follow-up actions.
+  - name: charge_id
+    type: string
+    description: Identifier for the charge related to the ticket, important for financial
+      tracking and chargebacks.
+  - name: requester_email
+    type: string
+    pii: true
+    classification: email
+    description: Email address of the ticket requester, used for communication and
+      personalization of support.
+  - name: requester_name
+    type: string
+    description: Name of the ticket requester, aiding in personalized customer service
+      and record-keeping.
+  - name: requester_phone
+    type: string
+    pii: true
+    classification: phone
+    description: Phone number of the ticket requester, providing an additional contact
+      method for support.
+  - name: subject
+    type: string
+    description: Brief summary of the ticket issue, facilitating quick understanding
+      and categorization.
+  - name: ticket_description
+    type: string
+    description: Detailed description of the issue, necessary for comprehensive problem
+      resolution and analysis.
+  - name: status
+    type: string
+    description: Current state of the ticket, indicating whether it is open, in progress,
+      or resolved.
+  - name: priority
+    type: string
+    description: Level of urgency for the ticket, guiding the order in which issues
+      are addressed.
+  - name: channel
+    type: string
+    description: The medium through which the ticket was submitted (e.g., email, chat,
+      phone), useful for channel performance analysis.
+  - name: assignee
+    type: string
+    description: Identifier of the support agent assigned to the ticket, important
+      for accountability and follow-up.
+  - name: tags_json
+    type: string
+    description: JSON-formatted tags categorizing the ticket, enabling efficient filtering
+      and trend analysis.
+  - name: created_at
+    type: timestamp
+    description: Timestamp indicating when the ticket was created, crucial for tracking
+      response times and SLAs.
+  - name: updated_at
+    type: timestamp
+    description: Timestamp indicating the last update to the ticket, helping monitor
+      ongoing engagement and resolution progress.
+  - name: solved_at
+    type: timestamp
+    description: Timestamp indicating when the ticket was resolved, important for
+      measuring resolution times and customer satisfaction.
+  - name: satisfaction_rating
+    type: float
+    description: Customer satisfaction score associated with the ticket, vital for
+      assessing service quality and areas for improvement.
+
+source:
+  type: landing
+  path: '{landing_root}/support_tickets'
+  load_mode: full
+
+dataset: bronze_zendesk_support_tickets

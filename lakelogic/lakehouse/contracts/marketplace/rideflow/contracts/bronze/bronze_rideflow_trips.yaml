@@ -1,0 +1,129 @@
+version: 1.0.0
+
+info:
+  title: Bronze — Rideflow Trips
+  target_layer: bronze
+  description: Each record captures a completed ride with details about the rider,
+    driver, pickup and dropoff locations, timestamps, trip distance and duration,
+    fare and tip amounts, payment method, and ratings exchanged between rider and
+    driver, sourced from the rideflow system's transactional logs.
+  table_name: '{bronze_layer}_rideflow_trips'
+  domain: marketplace
+  system: rideflow
+
+model:
+  fields:
+  - name: trip_id
+    type: string
+    description: Unique identifier for each ride trip, used to track and reference
+      individual transactions.
+  - name: rider_id
+    type: string
+    description: Identifier for the rider requesting the trip, linking the trip to
+      the rider's account.
+  - name: driver_id
+    type: string
+    description: Identifier for the driver who fulfilled the trip, linking the trip
+      to the driver's account.
+  - name: trip_type
+    type: string
+    description: Type of ride service provided (e.g., standard, premium), indicating
+      the service level or vehicle type.
+  - name: pickup_lat
+    type: string
+    pii: true
+    classification: gps_coordinate
+    description: Latitude coordinate where the rider was picked up, essential for
+      route mapping and trip analysis.
+  - name: pickup_lng
+    type: string
+    pii: true
+    classification: gps_coordinate
+    description: Longitude coordinate where the rider was picked up, completing the
+      pickup location data.
+  - name: dropoff_lat
+    type: string
+    pii: true
+    classification: gps_coordinate
+    description: Latitude coordinate where the rider was dropped off, important for
+      trip completion tracking.
+  - name: dropoff_lng
+    type: string
+    pii: true
+    classification: gps_coordinate
+    description: Longitude coordinate where the rider was dropped off, completing
+      the dropoff location data.
+  - name: city_code
+    type: string
+    description: Code representing the city where the trip occurred, used for regional
+      analysis and reporting.
+  - name: country_code
+    type: string
+    description: Code representing the country where the trip occurred, used for international
+      reporting and compliance.
+  - name: requested_at
+    type: timestamp
+    description: Timestamp indicating when the ride was requested, useful for analyzing
+      demand patterns.
+  - name: pickup_at
+    type: timestamp
+    description: Timestamp indicating when the ride actually began, important for
+      calculating trip duration and timing.
+  - name: dropoff_at
+    type: timestamp
+    description: Timestamp indicating when the ride was completed, crucial for trip
+      duration and performance metrics.
+  - name: distance_km
+    type: float
+    description: Distance of the trip in kilometers, used for fare calculation and
+      service analysis.
+  - name: duration_minutes
+    type: integer
+    description: Duration of the trip in minutes, key for performance metrics and
+      customer satisfaction analysis.
+  - name: fare_amount
+    type: float
+    description: Total fare charged for the trip, central to revenue tracking and
+      financial reporting.
+  - name: surge_multiplier
+    type: float
+    description: Multiplier applied to the fare during high-demand periods, indicating
+      surge pricing conditions.
+  - name: tip_amount
+    type: float
+    description: Amount tipped by the rider, contributing to driver earnings and customer
+      satisfaction insights.
+  - name: payment_method
+    type: string
+    description: Method used for payment (e.g., credit card, cash), important for
+      financial tracking and fraud prevention.
+  - name: rider_rating
+    type: float
+    description: Rating given by the rider to the driver, reflecting service quality
+      and driver performance.
+  - name: driver_rating
+    type: float
+    description: Rating given by the driver to the rider, providing feedback on rider
+      behavior and experience.
+  - name: notes
+    type: string
+    description: Additional comments or notes regarding the trip, useful for customer
+      service and quality assurance.
+
+source:
+  type: landing
+  path: '{landing_root}/trips'
+  load_mode: full
+
+quality:
+  row_rules:
+  - name: country_code_partition_not_null
+    sql: country_code IS NOT NULL
+    category: completeness
+    description: country_code is always present (never null).
+
+materialization:
+  partition_by:
+  - country_code
+
+dataset: bronze_rideflow_trips

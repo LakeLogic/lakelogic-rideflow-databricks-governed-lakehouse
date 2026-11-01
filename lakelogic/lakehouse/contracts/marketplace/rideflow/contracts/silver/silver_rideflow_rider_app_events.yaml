@@ -1,0 +1,136 @@
+version: 1.0.0
+
+info:
+  title: Silver — Rideflow Rider App Events
+  target_layer: silver
+  description: The table captures detailed user interactions and behaviors within
+    the Rideflow rider application, including unique event identifiers, rider identifiers,
+    device and IP information for personal data context, event names and screen locations
+    for action tracking, timestamps for timing analysis, and application and platform
+    details for version and environment insights. It includes additional flexible
+    event properties and geographic codes to support comprehensive analytics, troubleshooting,
+    and localized service improvements.
+  table_name: '{silver_layer}_rideflow_rider_app_events'
+  system: rideflow
+  domain: marketplace
+
+model:
+  fields:
+  - name: event_id
+    type: string
+    required: true
+    description: Unique identifier for each event, ensuring each event instance is
+      trackable and analyzable.
+  - name: rider_id
+    type: string
+    required: true
+    description: Identifier for the rider generating the event, linking events to
+      specific users for behavior analysis and service improvement.
+  - name: device_id
+    type: string
+    required: true
+    pii: true
+    classification: device_id
+    description: Identifier of the device used to generate the event; useful for understanding
+      device-specific usage patterns and troubleshooting.
+  - name: ip_address
+    type: string
+    required: false
+    pii: true
+    classification: ip_address
+    description: Network address where the event originated; helps in geolocation
+      and monitoring user access patterns.
+  - name: event_name
+    type: string
+    required: false
+    description: Name of the event occurring within the app, categorizing user actions
+      for analytical and diagnostic purposes.
+  - name: screen_name
+    type: string
+    required: false
+    description: Name of the app screen where the event occurred, providing context
+      to user interactions and navigation flow.
+  - name: event_timestamp
+    type: timestamp
+    required: false
+    description: Timestamp indicating when the event occurred, essential for time-based
+      analysis and sequencing of user activities.
+  - name: app_version
+    type: string
+    required: false
+    description: Version of the app in use when the event was triggered, important
+      for identifying issues or features specific to certain app releases.
+  - name: platform
+    type: string
+    required: false
+    description: Platform on which the app is running (e.g., iOS, Android), aiding
+      in platform-specific analysis and optimization.
+  - name: city_code
+    type: string
+    required: false
+    description: Code representing the city where the event took place, useful for
+      localized analysis and regional service adjustments.
+  - name: country_code
+    type: string
+    required: false
+    description: Code representing the country where the event took place, supporting
+      country-level analytics and compliance checks.
+  - name: event_properties_json
+    type: string
+    required: false
+    description: JSON object containing additional event-specific properties, offering
+      flexible storage of varied data points for detailed event analysis.
+  - name: event_date
+    type: date
+    required: false
+    description: 'Partition column: the calendar date of `event_timestamp`.'
+
+primary_key:
+- event_id
+
+quality:
+  row_rules:
+  - name: event_id_not_null
+    sql: event_id IS NOT NULL
+    category: completeness
+    description: event_id is always present (never null).
+  - name: rider_id_not_null
+    sql: rider_id IS NOT NULL
+    category: completeness
+    description: rider_id is always present (never null).
+  - name: device_id_not_null
+    sql: device_id IS NOT NULL
+    category: completeness
+    description: device_id is always present (never null).
+  - name: event_id_not_null
+    sql: event_id IS NOT NULL
+    category: completeness
+    description: event_id is always present (never null).
+
+transformations:
+- phase: pre
+  derive:
+    field: event_date
+    sql: CAST(event_timestamp AS DATE)
+- deduplicate:
+    by:
+    - event_id
+    sort_by:
+    - event_timestamp
+    order: desc
+
+materialization:
+  partition_by:
+  - country_code
+  - event_date
+
+dataset: silver_rideflow_rider_app_events
+
+source:
+  type: table
+  path: table:{domain_catalog}.{bronze_layer}_rideflow_rider_app_events
+  load_mode: incremental
+  watermark_field: _lakelogic_processed_at
+
+metadata:
+  run_log_table: '{domain_catalog}.lakelogic_run_log'

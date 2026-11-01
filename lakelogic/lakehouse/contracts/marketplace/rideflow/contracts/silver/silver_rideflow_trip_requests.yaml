@@ -1,0 +1,173 @@
+version: 1.0.0
+
+info:
+  title: Silver — Rideflow Trip Requests
+  target_layer: silver
+  description: The table records ride requests made through the marketplace, capturing
+    details such as the rider, pickup and drop-off locations, requested ride type,
+    estimated fare and time, and surge pricing. It includes personal location data
+    for both pickup and drop-off points, along with regional information for the city
+    and country where each ride is requested. Each request is timestamped to track
+    when it was made and includes an estimated cost and wait time to inform riders
+    before confirming their trip.
+  table_name: '{silver_layer}_rideflow_trip_requests'
+  system: rideflow
+  domain: marketplace
+
+model:
+  fields:
+  - name: request_id
+    type: string
+    required: true
+    description: Unique identifier for the ride request, used to track and reference
+      each individual trip request.
+  - name: rider_id
+    type: string
+    required: true
+    description: Identifier for the rider making the request, linking the trip to
+      the specific customer.
+  - name: trip_type
+    type: string
+    required: false
+    description: Type of ride requested (e.g., standard, premium), determining service
+      level and pricing.
+  - name: pickup_lat
+    type: float
+    required: false
+    pii: true
+    classification: gps_coordinate
+    description: Latitude coordinate of the ride pickup location, indicating where
+      the rider wants to start the trip.
+  - name: pickup_lng
+    type: float
+    required: false
+    pii: true
+    classification: gps_coordinate
+    description: Longitude coordinate of the ride pickup location, together with latitude
+      pinpointing the exact start position.
+  - name: dropoff_lat
+    type: float
+    required: false
+    pii: true
+    classification: gps_coordinate
+    description: Latitude coordinate of the ride drop-off location, indicating where
+      the rider wants the trip to end.
+  - name: dropoff_lng
+    type: float
+    required: false
+    pii: true
+    classification: gps_coordinate
+    description: Longitude coordinate of the ride drop-off location, together with
+      latitude specifying the exact end position.
+  - name: city_code
+    type: string
+    required: false
+    description: Code representing the city where the ride is requested, used for
+      regional analysis and reporting.
+  - name: country_code
+    type: string
+    required: false
+    description: Code representing the country where the ride is requested, enabling
+      country-level aggregation and compliance.
+  - name: requested_at
+    type: timestamp
+    required: false
+    description: Timestamp indicating when the ride was requested, crucial for timing
+      analysis and service performance metrics.
+  - name: estimated_fare
+    type: float
+    required: false
+    description: Estimated cost of the ride, helping riders understand expected payment
+      before confirming the request.
+  - name: estimated_eta_minutes
+    type: integer
+    required: false
+    description: Estimated time in minutes for the ride to be completed, setting rider
+      expectations for wait time.
+  - name: surge_multiplier
+    type: float
+    required: false
+    description: Multiplier indicating surge pricing applied to the ride, reflecting
+      demand fluctuations and dynamic pricing.
+  - name: requested_date
+    type: date
+    required: false
+    description: 'Partition column: the calendar date of `requested_at`.'
+
+primary_key:
+- request_id
+
+quality:
+  row_rules:
+  - name: request_id_not_null
+    sql: request_id IS NOT NULL
+    category: completeness
+    description: request_id is always present (never null).
+  - name: rider_id_not_null
+    sql: rider_id IS NOT NULL
+    category: completeness
+    description: rider_id is always present (never null).
+  - name: request_id_not_null
+    sql: request_id IS NOT NULL
+    category: completeness
+    description: request_id is always present (never null).
+  - name: pickup_lat_range_min
+    sql: pickup_lat IS NULL OR pickup_lat >= -90.0
+    category: validity
+    description: pickup_lat is at least -90.0 when present.
+  - name: pickup_lat_range_max
+    sql: pickup_lat IS NULL OR pickup_lat <= 90.0
+    category: validity
+    description: pickup_lat is at most 90.0 when present.
+  - name: pickup_lng_range_min
+    sql: pickup_lng IS NULL OR pickup_lng >= -180.0
+    category: validity
+    description: pickup_lng is at least -180.0 when present.
+  - name: pickup_lng_range_max
+    sql: pickup_lng IS NULL OR pickup_lng <= 180.0
+    category: validity
+    description: pickup_lng is at most 180.0 when present.
+  - name: dropoff_lat_range_min
+    sql: dropoff_lat IS NULL OR dropoff_lat >= -90.0
+    category: validity
+    description: dropoff_lat is at least -90.0 when present.
+  - name: dropoff_lat_range_max
+    sql: dropoff_lat IS NULL OR dropoff_lat <= 90.0
+    category: validity
+    description: dropoff_lat is at most 90.0 when present.
+  - name: dropoff_lng_range_min
+    sql: dropoff_lng IS NULL OR dropoff_lng >= -180.0
+    category: validity
+    description: dropoff_lng is at least -180.0 when present.
+  - name: dropoff_lng_range_max
+    sql: dropoff_lng IS NULL OR dropoff_lng <= 180.0
+    category: validity
+    description: dropoff_lng is at most 180.0 when present.
+
+transformations:
+- phase: pre
+  derive:
+    field: requested_date
+    sql: CAST(requested_at AS DATE)
+- deduplicate:
+    by:
+    - request_id
+    sort_by:
+    - requested_at
+    order: desc
+
+materialization:
+  partition_by:
+  - country_code
+  - requested_date
+
+dataset: silver_rideflow_trip_requests
+
+source:
+  type: table
+  path: table:{domain_catalog}.{bronze_layer}_rideflow_trip_requests
+  load_mode: incremental
+  watermark_field: _lakelogic_processed_at
+
+metadata:
+  run_log_table: '{domain_catalog}.lakelogic_run_log'

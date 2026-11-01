@@ -1,0 +1,149 @@
+version: 1.0.0
+
+info:
+  title: Silver — Rideflow Driver Telemetry
+  target_layer: silver
+  description: The table records real-time GPS and operational data for drivers during
+    their trips, including precise location coordinates treated as personal data,
+    speed, direction, and status, all timestamped for each recorded moment and linked
+    to specific drivers and customer journeys.
+  table_name: '{silver_layer}_rideflow_driver_telemetry'
+  system: rideflow
+  domain: marketplace
+
+model:
+  fields:
+  - name: telemetry_id
+    type: string
+    required: true
+    description: Unique identifier for each telemetry record, ensuring each data point
+      can be traced and referenced.
+  - name: driver_id
+    type: string
+    required: true
+    description: Identifier for the driver associated with the telemetry data, linking
+      records to specific drivers.
+  - name: gps_lat
+    type: float
+    required: false
+    pii: true
+    classification: gps_coordinate
+    description: Latitude component of the GPS coordinates, indicating the driver's
+      geographic position — treated as personal data.
+  - name: gps_lng
+    type: float
+    required: false
+    pii: true
+    classification: gps_coordinate
+    description: Longitude component of the GPS coordinates, indicating the driver's
+      geographic position — treated as personal data.
+  - name: speed_kmh
+    type: float
+    required: false
+    description: Speed of the driver in kilometers per hour, providing insight into
+      driving behavior and performance.
+  - name: heading
+    type: string
+    required: false
+    description: Direction the driver is heading in degrees, useful for route analysis
+      and navigation purposes.
+  - name: accuracy_meters
+    type: string
+    required: false
+    description: Accuracy of the GPS measurement in meters, indicating the precision
+      of the location data.
+  - name: trip_id
+    type: string
+    required: true
+    description: Identifier for the trip associated with the telemetry data, linking
+      records to specific customer journeys.
+  - name: status
+    type: string
+    required: false
+    description: Current status of the driver (e.g., idle, driving, unavailable),
+      helping manage driver availability and service levels.
+  - name: city_code
+    type: string
+    required: false
+    description: Code representing the city where the telemetry was recorded, enabling
+      location-based analysis.
+  - name: country_code
+    type: string
+    required: false
+    description: Code representing the country where the telemetry was recorded, supporting
+      regional analytics and compliance.
+  - name: timestamp
+    type: timestamp
+    required: false
+    description: Timestamp indicating when the telemetry data was recorded, essential
+      for time-series analysis and auditing.
+  - name: timestamp_date
+    type: date
+    required: false
+    description: 'Partition column: the calendar date of `timestamp`.'
+
+primary_key:
+- telemetry_id
+
+quality:
+  row_rules:
+  - name: telemetry_id_not_null
+    sql: telemetry_id IS NOT NULL
+    category: completeness
+    description: telemetry_id is always present (never null).
+  - name: driver_id_not_null
+    sql: driver_id IS NOT NULL
+    category: completeness
+    description: driver_id is always present (never null).
+  - name: trip_id_not_null
+    sql: trip_id IS NOT NULL
+    category: completeness
+    description: trip_id is always present (never null).
+  - name: telemetry_id_not_null
+    sql: telemetry_id IS NOT NULL
+    category: completeness
+    description: telemetry_id is always present (never null).
+  - name: gps_lat_range_min
+    sql: gps_lat IS NULL OR gps_lat >= -90.0
+    category: validity
+    description: gps_lat is at least -90.0 when present.
+  - name: gps_lat_range_max
+    sql: gps_lat IS NULL OR gps_lat <= 90.0
+    category: validity
+    description: gps_lat is at most 90.0 when present.
+  - name: gps_lng_range_min
+    sql: gps_lng IS NULL OR gps_lng >= -180.0
+    category: validity
+    description: gps_lng is at least -180.0 when present.
+  - name: gps_lng_range_max
+    sql: gps_lng IS NULL OR gps_lng <= 180.0
+    category: validity
+    description: gps_lng is at most 180.0 when present.
+
+transformations:
+- phase: pre
+  derive:
+    field: timestamp_date
+    sql: CAST(timestamp AS DATE)
+- deduplicate:
+    by:
+    - telemetry_id
+    sort_by:
+    - timestamp
+    order: desc
+
+materialization:
+  partition_by:
+  - country_code
+  - timestamp_date
+
+dataset: silver_rideflow_driver_telemetry
+
+source:
+  type: table
+  path: table:{domain_catalog}.{bronze_layer}_rideflow_driver_telemetry
+  load_mode: incremental
+  watermark_field: _lakelogic_processed_at
+
+metadata:
+  run_log_table: '{domain_catalog}.lakelogic_run_log'

@@ -1,0 +1,96 @@
+version: 1.0.0
+
+info:
+  title: Bronze — Rideflow Trip Requests
+  target_layer: bronze
+  description: The table records each ride request made through the Rideflow marketplace,
+    capturing essential details such as the rider's identity, ride type, precise pickup
+    and drop-off coordinates, and the city and country codes for the request. It includes
+    timestamps for when the ride was requested, along with estimated fare and time,
+    and reflects any surge pricing applied. The data contains personal information
+    in the form of geographic coordinates and is designed to support timing analysis,
+    service performance metrics, and regional reporting.
+  table_name: '{bronze_layer}_rideflow_trip_requests'
+  domain: marketplace
+  system: rideflow
+
+model:
+  fields:
+  - name: request_id
+    type: string
+    description: Unique identifier for the ride request, used to track and reference
+      each individual trip request.
+  - name: rider_id
+    type: string
+    description: Identifier for the rider making the request, linking the trip to
+      the specific customer.
+  - name: trip_type
+    type: string
+    description: Type of ride requested (e.g., standard, premium), determining service
+      level and pricing.
+  - name: pickup_lat
+    type: float
+    pii: true
+    classification: gps_coordinate
+    description: Latitude coordinate of the ride pickup location, indicating where
+      the rider wants to start the trip.
+  - name: pickup_lng
+    type: float
+    pii: true
+    classification: gps_coordinate
+    description: Longitude coordinate of the ride pickup location, together with latitude
+      pinpointing the exact start position.
+  - name: dropoff_lat
+    type: float
+    pii: true
+    classification: gps_coordinate
+    description: Latitude coordinate of the ride drop-off location, indicating where
+      the rider wants the trip to end.
+  - name: dropoff_lng
+    type: float
+    pii: true
+    classification: gps_coordinate
+    description: Longitude coordinate of the ride drop-off location, together with
+      latitude specifying the exact end position.
+  - name: city_code
+    type: string
+    description: Code representing the city where the ride is requested, used for
+      regional analysis and reporting.
+  - name: country_code
+    type: string
+    description: Code representing the country where the ride is requested, enabling
+      country-level aggregation and compliance.
+  - name: requested_at
+    type: timestamp
+    description: Timestamp indicating when the ride was requested, crucial for timing
+      analysis and service performance metrics.
+  - name: estimated_fare
+    type: float
+    description: Estimated cost of the ride, helping riders understand expected payment
+      before confirming the request.
+  - name: estimated_eta_minutes
+    type: integer
+    description: Estimated time in minutes for the ride to be completed, setting rider
+      expectations for wait time.
+  - name: surge_multiplier
+    type: float
+    description: Multiplier indicating surge pricing applied to the ride, reflecting
+      demand fluctuations and dynamic pricing.
+
+source:
+  type: landing
+  path: '{landing_root}/trip_requests'
+  load_mode: full
+
+quality:
+  row_rules:
+  - name: country_code_partition_not_null
+    sql: country_code IS NOT NULL
+    category: completeness
+    description: country_code is always present (never null).
+
+materialization:
+  partition_by:
+  - country_code
+
+dataset: bronze_rideflow_trip_requests
