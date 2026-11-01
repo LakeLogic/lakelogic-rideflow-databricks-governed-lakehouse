@@ -18,47 +18,30 @@ model:
   - name: city_code
     type: string
     required: true
-    description: Unique identifier for the city used internally for referencing and
-      processing.
   - name: city_name
     type: string
     required: false
-    description: Full name of the city for identification and display purposes.
   - name: country_code
     type: string
     required: false
-    description: Code representing the country the city belongs to, used for regional
-      grouping and analysis.
   - name: default_currency
     type: string
     required: false
-    description: Default currency used in the city for financial transactions and
-      reporting.
   - name: geofence_wkt
     type: string
     required: false
-    description: Geospatial boundary definition of the city used for location-based
-      services and analytics.
   - name: is_active
     type: boolean
     required: false
-    description: Boolean flag indicating whether the city is currently active and
-      available within the system.
   - name: launched_at
     type: timestamp
     required: false
-    description: Timestamp indicating when the city was added to the system, tracking
-      system coverage over time.
   - name: sunset_at
     type: timestamp
     required: false
-    description: Timestamp indicating when the city will be removed or deactivated
-      from the system.
   - name: timezone
     type: string
     required: false
-    description: Timezone of the city to manage time-related data accurately across
-      different regions.
   - name: system
     type: string
     required: true
