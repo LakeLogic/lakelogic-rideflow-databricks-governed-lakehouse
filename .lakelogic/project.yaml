@@ -1,0 +1,9 @@
+# Written by LakeLogic on every delivery. It names the LakeLogic project this repository
+# was delivered from, so "Upgrade a LakeLogic estate" can continue that project.
+# It holds no secret. Keep it, or the next upgrade starts a new project.
+schema: lakelogic.project/v1
+project_id: snap-0a74015812c04e5c
+project_name: Route 2 delivery test
+revision: chv1:ea6cd7ecfa13f540123d21398ed66f0a498c375adc2b2090a7751ee3cd5f68f2
+seal: sha256:d30338900769142aa347c313e9ac0207a588b5314dbc5a645a9edf6b82e42407
+snapshot: snap-0a74015812c04e5c
