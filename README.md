@@ -1,4 +1,4 @@
-# RideFlow: a governed data mesh on Databricks
+# RideFlow: Data Platform Architecture on Databricks
 
 **Build a decentralised Databricks lakehouse with shared governance.**
 
