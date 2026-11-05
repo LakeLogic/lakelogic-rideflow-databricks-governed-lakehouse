@@ -1,6 +1,8 @@
 version: 1.0.0
 
 info:
+  data_product: rider_and_driver_profiles
+  data_product_output: fact_rider_app_events
   title: Gold — Fact Rider App Events
   target_layer: gold
   description: Rider activity captured from the RideFlow rider app, one record per

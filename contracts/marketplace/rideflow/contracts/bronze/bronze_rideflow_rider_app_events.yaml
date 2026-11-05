@@ -68,7 +68,7 @@ model:
 source:
   type: landing
   path: '{landing_root}/rider_app_events'
-  format: csv
+  format: json
   partition:
     format: y_%Y/m_%m/d_%d/h_%H
   load_mode: incremental

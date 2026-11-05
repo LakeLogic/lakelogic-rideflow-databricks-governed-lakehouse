@@ -97,8 +97,9 @@ transformations:
       r.total_distance_km,
       r.total_duration_minutes,
       r.avg_rider_rating,
-      CAST(EXTRACT(YEAR FROM r.activity_date) AS BIGINT) * 10000 + CAST(EXTRACT(MONTH FROM r.activity_date) AS BIGINT) * 100 + CAST(EXTRACT(DAY FROM r.activity_date) AS BIGINT) AS date_key
+      dd.date_key AS date_key
     FROM r
+    LEFT JOIN gold_dim_date dd ON dd.full_date = r.activity_date
 - phase: pre
   derive:
     field: system
@@ -108,8 +109,12 @@ links:
 - name: silver_rideflow_trip_completed_full
   type: table
   path: table:{silver_root}.{silver_layer}_rideflow_trip_completed
+- name: gold_dim_date
+  type: table
+  path: table:`{domain_catalog_prefix}_reference`.{gold_layer}.{gold_layer}_dim_date
 
-upstream: []
+upstream:
+- gold_dim_date
 
 materialization:
   fact:

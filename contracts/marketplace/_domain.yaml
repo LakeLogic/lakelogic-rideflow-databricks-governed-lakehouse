@@ -166,7 +166,9 @@ products:
       kind: table
   - id: rider_and_driver_profiles
     name: Rider and Driver Profiles
-    description: Current and historical rider and driver profiles, and driver performance.
+    description: Who rides and who drives, and how they behave. Rider and driver profiles
+      with full history, driver speed and status from in-car telemetry, and rider activity
+      in the app.
     lifecycle: active
     expected_outputs:
     - id: dim_rider
@@ -174,6 +176,15 @@ products:
       kind: table
     - id: dim_driver
       name: Driver
+      kind: table
+    - id: fact_driver_telemetry
+      name: Driver Telemetry
+      kind: table
+    - id: fact_driver_telemetry_daily
+      name: Driver Telemetry Daily
+      kind: table
+    - id: fact_rider_app_events
+      name: Rider App Events
       kind: table
   - id: surge_pricing
     name: Surge Pricing
