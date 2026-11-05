@@ -27,6 +27,20 @@ model:
       type: string
       description: RideFlow city code.
       required: true
+    - name: date_key
+      type: integer
+      required: true
+      foreign_key:
+        contract: gold_dim_date
+        column: date_key
+      description: Key of the date dimension for kpi_date (YYYYMMDD), read from gold_dim_date.
+    - name: city_sk
+      type: string
+      required: true
+      foreign_key:
+        contract: gold_dim_city_master
+        column: city_master_sk
+      description: Surrogate key of the city's current row in gold_dim_city_master; '-1' when the dimension does not know the city.
     # ── Volume ──
     - name: requested_trips
       type: integer
@@ -108,6 +122,8 @@ transformations:
         UNION SELECT kpi_date, city_code FROM can
       )
       SELECT k.kpi_date, k.city_code,
+             dd.date_key                                   AS date_key,
+             COALESCE(dc.city_master_sk, '-1')             AS city_sk,
              CAST(COALESCE(req.requested_trips,0) AS int)  AS requested_trips,
              CAST(COALESCE(tr.completed_trips,0)  AS int)  AS completed_trips,
              CAST(COALESCE(can.cancelled_trips,0) AS int)  AS cancelled_trips,
@@ -124,6 +140,8 @@ transformations:
       LEFT JOIN tr  ON tr.kpi_date=k.kpi_date  AND tr.city_code=k.city_code
       LEFT JOIN can ON can.kpi_date=k.kpi_date AND can.city_code=k.city_code
       LEFT JOIN rev ON rev.kpi_date=k.kpi_date AND rev.city_code=k.city_code
+      LEFT JOIN gold_dim_date dd ON dd.full_date = k.kpi_date
+      LEFT JOIN gold_dim_city_master dc ON dc.city_code = k.city_code AND dc.is_current = true
 
 quality:
   row_rules:
@@ -159,6 +177,16 @@ links:
   - name: pay_charges
     type: table
     path: "table:`{domain_catalog_prefix}_payments`.silver.silver_stripe_charges"
+  - name: gold_dim_date
+    type: table
+    path: "table:`{domain_catalog_prefix}_reference`.{gold_layer}.{gold_layer}_dim_date"
+  - name: gold_dim_city_master
+    type: table
+    path: "table:`{domain_catalog_prefix}_reference`.{gold_layer}.{gold_layer}_dim_city_master"
+
+upstream:
+  - gold_dim_date
+  - gold_dim_city_master
 
 downstream:
   - type: semantic_model

@@ -58,10 +58,11 @@ targets:
     default: true
     variables:
       catalog: rideflow_dev
-      # The metastore has no storage root, so a catalog setup creates needs a location. The six
-      # domain catalogs live here (created 2026-10-27 with this root passed by hand, never saved,
-      # so the next new catalog - rideflow_dev_shared - failed). Kept here so every run uses it.
-      catalog_storage_root: abfss://unity-catalog-storage@dbstoragegjbcqqdws2r4o.dfs.core.windows.net/7405615991211788/catalogs
+      # Blank = the metastore's own storage. If your metastore has no storage root, setup needs a
+      # location for each catalog it creates: pass yours at deploy time rather than committing it,
+      # e.g. BUNDLE_VAR_catalog_storage_root=abfss://<container>@<account>.dfs.core.windows.net/<path>
+      # or --var="catalog_storage_root=..." (see docs/catalog-configuration.md).
+      catalog_storage_root: ''
       lakelogic_version: 1.85.1
       lakelogic_wheel: ''
       telemetry_key_scope: ''

@@ -67,12 +67,11 @@ model:
 source:
   type: stream
   path: '{landing_root}/driver_telemetry'
-  format: csv
+  format: json
   options:
     kind: files
     checkpoint: '{log_root}/_checkpoints/driver_telemetry'
     trigger: available_now
-    header: true
 
 primary_key:
 - telemetry_id

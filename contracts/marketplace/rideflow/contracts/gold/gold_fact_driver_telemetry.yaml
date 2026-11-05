@@ -1,6 +1,8 @@
 version: 1.0.0
 
 info:
+  data_product: rider_and_driver_profiles
+  data_product_output: fact_driver_telemetry
   title: Gold — Fact Driver Telemetry
   target_layer: gold
   description: Individual location pings from RideFlow drivers, each carrying the
