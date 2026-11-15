@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 1080" width="920" height="1080" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif">
+<rect width="920" height="1080" fill="#0D1117"/>
+<line x1="170" y1="250" x2="140" y2="540" stroke="#22D3EE" stroke-opacity="0.55" stroke-width="2"/>
+<line x1="460" y1="250" x2="140" y2="540" stroke="#FBBF24" stroke-opacity="0.55" stroke-width="2"/>
+<line x1="750" y1="250" x2="140" y2="540" stroke="#94A3B8" stroke-opacity="0.55" stroke-width="2"/>
+<line x1="170" y1="250" x2="360" y2="540" stroke="#22D3EE" stroke-opacity="0.55" stroke-width="2"/>
+<line x1="460" y1="250" x2="360" y2="540" stroke="#FBBF24" stroke-opacity="0.55" stroke-width="2"/>
+<line x1="750" y1="250" x2="360" y2="540" stroke="#94A3B8" stroke-opacity="0.55" stroke-width="2"/>
+<line x1="170" y1="250" x2="580" y2="540" stroke="#22D3EE" stroke-opacity="0.55" stroke-width="2"/>
+<line x1="170" y1="830" x2="580" y2="540" stroke="#A78BFA" stroke-opacity="0.55" stroke-width="2"/>
+<line x1="460" y1="250" x2="580" y2="540" stroke="#FBBF24" stroke-opacity="0.55" stroke-width="2"/>
+<line x1="750" y1="830" x2="800" y2="540" stroke="#F472B6" stroke-opacity="0.55" stroke-width="2"/>
+<circle cx="170" cy="250" r="78" fill="#0D1117"/>
+<circle cx="170" cy="250" r="78" fill="#22D3EE" fill-opacity="0.16" stroke="#22D3EE" stroke-width="2.5"/>
+<text x="170" y="249" font-size="17" font-weight="600" fill="#E8EEF0" text-anchor="middle">Marketplace</text>
+<text x="170" y="269" font-size="11.5" fill="#9AA8B2" text-anchor="middle">28 contracts</text>
+<text x="170" y="158" font-size="12.5" fill="#9AA8B2" text-anchor="middle">RideFlow app</text>
+<circle cx="460" cy="250" r="67" fill="#0D1117"/>
+<circle cx="460" cy="250" r="67" fill="#FBBF24" fill-opacity="0.16" stroke="#FBBF24" stroke-width="2.5"/>
+<text x="460" y="249" font-size="17" font-weight="600" fill="#E8EEF0" text-anchor="middle">Payments</text>
+<text x="460" y="269" font-size="11.5" fill="#9AA8B2" text-anchor="middle">17 contracts</text>
+<text x="460" y="153" font-size="12.5" fill="#9AA8B2" text-anchor="middle">Stripe</text>
+<text x="460" y="169" font-size="12.5" fill="#9AA8B2" text-anchor="middle">Driver expenses</text>
+<circle cx="750" cy="250" r="77" fill="#0D1117"/>
+<circle cx="750" cy="250" r="77" fill="#94A3B8" fill-opacity="0.16" stroke="#94A3B8" stroke-width="2.5"/>
+<text x="750" y="249" font-size="17" font-weight="600" fill="#E8EEF0" text-anchor="middle">Reference</text>
+<text x="750" y="269" font-size="11.5" fill="#9AA8B2" text-anchor="middle">27 contracts</text>
+<text x="750" y="159" font-size="12.5" fill="#9AA8B2" text-anchor="middle">Internal lists</text>
+<circle cx="170" cy="830" r="82" fill="#0D1117"/>
+<circle cx="170" cy="830" r="82" fill="#A78BFA" fill-opacity="0.16" stroke="#A78BFA" stroke-width="2.5"/>
+<text x="170" y="829" font-size="17" font-weight="600" fill="#E8EEF0" text-anchor="middle">Operations</text>
+<text x="170" y="849" font-size="11.5" fill="#9AA8B2" text-anchor="middle">34 contracts</text>
+<text x="170" y="936" font-size="12.5" fill="#9AA8B2" text-anchor="middle">Onboarding, Checkr,</text>
+<text x="170" y="952" font-size="12.5" fill="#9AA8B2" text-anchor="middle">Trust &amp; Safety,</text>
+<text x="170" y="968" font-size="12.5" fill="#9AA8B2" text-anchor="middle">Zendesk, Twilio</text>
+<circle cx="460" cy="830" r="70" fill="#0D1117"/>
+<circle cx="460" cy="830" r="70" fill="#34D399" fill-opacity="0.16" stroke="#34D399" stroke-width="2.5"/>
+<text x="460" y="829" font-size="17" font-weight="600" fill="#E8EEF0" text-anchor="middle">Business</text>
+<text x="460" y="849" font-size="11.5" fill="#9AA8B2" text-anchor="middle">20 contracts</text>
+<text x="460" y="924" font-size="12.5" fill="#9AA8B2" text-anchor="middle">Salesforce</text>
+<circle cx="750" cy="830" r="78" fill="#0D1117"/>
+<circle cx="750" cy="830" r="78" fill="#F472B6" fill-opacity="0.16" stroke="#F472B6" stroke-width="2.5"/>
+<text x="750" y="829" font-size="17" font-weight="600" fill="#E8EEF0" text-anchor="middle">Marketing</text>
+<text x="750" y="849" font-size="11.5" fill="#9AA8B2" text-anchor="middle">28 contracts</text>
+<text x="750" y="932" font-size="12.5" fill="#9AA8B2" text-anchor="middle">Google Ads, Meta Ads,</text>
+<text x="750" y="948" font-size="12.5" fill="#9AA8B2" text-anchor="middle">Analytics, HubSpot</text>
+<circle cx="140" cy="540" r="52" fill="#0D1117"/>
+<circle cx="140" cy="540" r="52" fill="#2DD4BF" fill-opacity="0.16" stroke="#2DD4BF" stroke-width="2.5"/>
+<text x="140" y="537" font-size="13.5" font-weight="600" fill="#E8EEF0" text-anchor="middle">Daily</text>
+<text x="140" y="553" font-size="13.5" font-weight="600" fill="#E8EEF0" text-anchor="middle">revenue</text>
+<circle cx="360" cy="540" r="52" fill="#0D1117"/>
+<circle cx="360" cy="540" r="52" fill="#2DD4BF" fill-opacity="0.16" stroke="#2DD4BF" stroke-width="2.5"/>
+<text x="360" y="537" font-size="13.5" font-weight="600" fill="#E8EEF0" text-anchor="middle">Marketplace</text>
+<text x="360" y="553" font-size="13.5" font-weight="600" fill="#E8EEF0" text-anchor="middle">health</text>
+<circle cx="580" cy="540" r="52" fill="#0D1117"/>
+<circle cx="580" cy="540" r="52" fill="#2DD4BF" fill-opacity="0.16" stroke="#2DD4BF" stroke-width="2.5"/>
+<text x="580" y="537" font-size="13.5" font-weight="600" fill="#E8EEF0" text-anchor="middle">Driver</text>
+<text x="580" y="553" font-size="13.5" font-weight="600" fill="#E8EEF0" text-anchor="middle">360</text>
+<circle cx="800" cy="540" r="52" fill="#0D1117"/>
+<circle cx="800" cy="540" r="52" fill="#2DD4BF" fill-opacity="0.16" stroke="#2DD4BF" stroke-width="2.5"/>
+<text x="800" y="537" font-size="13.5" font-weight="600" fill="#E8EEF0" text-anchor="middle">Acquisition</text>
+<text x="800" y="553" font-size="13.5" font-weight="600" fill="#E8EEF0" text-anchor="middle">cost</text>
+<circle cx="31" cy="1036" r="6" fill="#22D3EE" fill-opacity="0.32" stroke="#22D3EE" stroke-width="2"/>
+<text x="43" y="1040" font-size="12.5" fill="#9AA8B2">Marketplace</text>
+<circle cx="138.4" cy="1036" r="6" fill="#FBBF24" fill-opacity="0.32" stroke="#FBBF24" stroke-width="2"/>
+<text x="150.4" y="1040" font-size="12.5" fill="#9AA8B2">Payments</text>
+<circle cx="223.60000000000002" cy="1036" r="6" fill="#94A3B8" fill-opacity="0.32" stroke="#94A3B8" stroke-width="2"/>
+<text x="235.60000000000002" y="1040" font-size="12.5" fill="#9AA8B2">Reference</text>
+<circle cx="316.20000000000005" cy="1036" r="6" fill="#A78BFA" fill-opacity="0.32" stroke="#A78BFA" stroke-width="2"/>
+<text x="328.20000000000005" y="1040" font-size="12.5" fill="#9AA8B2">Operations</text>
+<circle cx="416.20000000000005" cy="1036" r="6" fill="#34D399" fill-opacity="0.32" stroke="#34D399" stroke-width="2"/>
+<text x="428.20000000000005" y="1040" font-size="12.5" fill="#9AA8B2">Business</text>
+<circle cx="501.40000000000003" cy="1036" r="6" fill="#F472B6" fill-opacity="0.32" stroke="#F472B6" stroke-width="2"/>
+<text x="513.4000000000001" y="1040" font-size="12.5" fill="#9AA8B2">Marketing</text>
+<circle cx="594.0" cy="1036" r="6" fill="#2DD4BF" fill-opacity="0.32" stroke="#2DD4BF" stroke-width="2"/>
+<text x="606.0" y="1040" font-size="12.5" fill="#9AA8B2">Shared product</text>
+<text x="24" y="1064" font-size="11.5" fill="#9AA8B2">Circle size: contracts in the domain. Lines: a Shared product reads tables from that domain.</text>
+</svg>
