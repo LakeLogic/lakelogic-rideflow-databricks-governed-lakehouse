@@ -23,6 +23,8 @@ Domains maintain their own contract trees and publish products in separate catal
 
 **Why this is a mesh pattern:** domain-local definitions, consumer-facing products, reusable platform execution and shared governance conventions. Catalog separation and declared owners do not automatically establish team permissions; configure Unity Catalog grants and review responsibilities explicitly.
 
+**New here?** Start with [the business case](docs/business-case.md): who owns what, how the systems connect, and a ten-minute story to present.
+
 Domains: Marketplace, Payments, Operations, Marketing, Business, Reference and Shared. Some diagrams predate Business/Salesforce; the contract tree is authoritative. [Explore the architecture](docs/architecture-reference.md)
 
 ## What you can learn
