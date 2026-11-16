@@ -48,3 +48,13 @@ retention:
   bronze: P7D
   silver: P90D
   gold: P7Y
+concepts:
+  Business account:
+    definition: A company or organisation recorded in the CRM, with billing details,
+      industry and employee count.
+    identifier: Id
+    also_called:
+    - Account
+    - Company
+    - Customer account
+    - Organisation
