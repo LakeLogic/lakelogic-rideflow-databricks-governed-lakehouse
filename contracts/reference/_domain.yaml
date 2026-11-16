@@ -169,3 +169,12 @@ products:
     - id: fact_fx_rate_daily
       name: FX Rate Daily
       kind: table
+concepts:
+  Daily FX rate:
+    definition: The daily conversion rate between two currencies, sourced from an
+      internal feed.
+    also_called:
+    - Fx rate daily
+    - Exchange rate
+    - FX rate
+    - Currency rate
