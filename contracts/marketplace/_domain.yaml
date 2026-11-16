@@ -194,3 +194,8 @@ products:
     - id: fact_surge_pricing_inference
       name: Surge Pricing Inference
       kind: table
+relationships:
+- from: Driver
+  verb: is screened by
+  to: Background check
+  cardinality: one_to_many
