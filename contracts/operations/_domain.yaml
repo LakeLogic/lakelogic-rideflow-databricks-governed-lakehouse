@@ -128,3 +128,8 @@ retention:
   bronze: P7D
   silver: P90D
   gold: P7Y
+relationships:
+- from: Driver licence
+  verb: is versioned as
+  to: Driving licence
+  cardinality: one_to_many
