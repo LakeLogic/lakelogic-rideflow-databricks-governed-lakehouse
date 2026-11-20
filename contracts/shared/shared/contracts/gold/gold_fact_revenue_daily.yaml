@@ -66,7 +66,7 @@ model:
     - name: refund_count
       type: integer
       description: Number of refunds on the day's charges.
-    - name: net_revenue_amount
+    - name: net_revenue
       type: float
       description: "gross_revenue_amount - refund_amount."
     - name: trip_count
@@ -141,7 +141,7 @@ transformations:
              COALESCE(pg.driver_payout_amount, 0.0)                   AS driver_payout_amount,
              COALESCE(rf.refund_amount, 0.0)                          AS refund_amount,
              CAST(COALESCE(rf.refund_count, 0) AS int)                AS refund_count,
-             agg.gross_revenue_amount - COALESCE(rf.refund_amount,0.0) AS net_revenue_amount,
+             agg.gross_revenue_amount - COALESCE(rf.refund_amount,0.0) AS net_revenue,
              CAST(agg.trip_count AS int)                              AS trip_count,
              'GBP'                                                    AS currency,
              'stripe'                                                 AS system
@@ -156,7 +156,7 @@ quality:
   row_rules:
     - name: net_revenue_non_negative
       category: validity
-      sql: "net_revenue_amount IS NULL OR net_revenue_amount >= 0"
+      sql: "net_revenue IS NULL OR net_revenue >= 0"
     - name: refund_le_gross
       category: consistency
       sql: "refund_amount IS NULL OR gross_revenue_amount IS NULL OR refund_amount <= gross_revenue_amount"
