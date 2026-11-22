@@ -6,13 +6,25 @@ info:
   title: "Gold — Fact Revenue Daily"
   table_name: '{gold_layer}_fact_revenue_daily'
   description: >
-    Daily platform revenue normalized to GBP. Aggregates Stripe charges
-    (gross + commission + driver payout + refunds) attributed to Rideflow
-    trips for city / vehicle dimensions. One row per
-    (kpi_date, city_code, vehicle_type). Powers finance dashboards.
+    Daily platform revenue in GBP. Gross revenue is succeeded Stripe charges
+    for completed trips, dated by the day the charge was created (UTC),
+    attributed to the trip's city and the driver's vehicle type. Refunds are
+    succeeded refunds against those charges. Driver payouts are paid payouts,
+    dated by arrival day and attributed to the driver's home city and vehicle
+    type: Stripe payouts carry no trip, so they are not matched to individual
+    trips. Every amount is converted to GBP with that day's rate from
+    gold_fact_fx_rates_daily (GBP stays as it is). An amount with no rate for
+    its day is left out and counted in unconverted_count, never guessed.
+    One row per (kpi_date, city_code, vehicle_type). Powers finance dashboards.
   target_layer: gold
   domain: shared
   system: shared
+  # Accountable for what "revenue" means: Finance. Platform Data Engineering builds and runs it.
+  # A cross-domain product still has one business owner (business case, 2026-11-15).
+  owner: finance
+  contact:
+    business_owner: Finance
+    technical_owner: Platform Data Engineering
 
 primary_key: [kpi_date, city_code, vehicle_type]
 
@@ -22,7 +34,7 @@ model:
     - name: kpi_date
       type: date
       required: true
-      description: "Calendar date the charge settled (UTC)."
+      description: "Calendar date the charge was created (UTC). Payouts use their arrival date."
     - name: city_code
       type: string
       description: "Joined from silver_rideflow_trip_completed via charge.trip_id → trip.city_code."
@@ -31,11 +43,11 @@ model:
       description: "Joined from silver_rideflow_trip_completed."
     - name: date_key
       type: integer
-      required: true
+      required: false
       foreign_key:
         contract: gold_dim_date
         column: date_key
-      description: Key of the date dimension for kpi_date (YYYYMMDD), read from gold_dim_date.
+      description: Key of the date dimension for kpi_date (YYYYMMDD), read from gold_dim_date; empty when the dimension has no row for that day.
     - name: city_sk
       type: string
       required: true
@@ -53,16 +65,16 @@ model:
     # ── Revenue facts ──
     - name: gross_revenue_amount
       type: float
-      description: "Sum of stripe_charges.amount in GBP."
+      description: "Sum of succeeded stripe_charges.amount, converted to GBP at the charge day's rate."
     - name: platform_commission_amount
       type: float
       description: "Platform take from gross (currently 25% of fare)."
     - name: driver_payout_amount
       type: float
-      description: "Sum of stripe_payouts.amount linked to today's trips."
+      description: "Sum of paid stripe_payouts.amount arriving this day for drivers whose home city and vehicle type match this row, converted to GBP at the arrival day's rate. Not matched to individual trips."
     - name: refund_amount
       type: float
-      description: "Sum of stripe_refunds.amount (subtract from gross to get net)."
+      description: "Sum of succeeded stripe_refunds.amount against this row's charges, converted to GBP at the charge day's rate (subtract from gross to get net)."
     - name: refund_count
       type: integer
       description: Number of refunds on the day's charges.
@@ -72,9 +84,12 @@ model:
     - name: trip_count
       type: integer
       description: "Count of distinct charged trips (excludes cancelled)."
+    - name: unconverted_count
+      type: int
+      description: "Charges, refunds and payouts on this row left out because gold_fact_fx_rates_daily has no GBP rate for their currency and day. Zero means every amount is in the totals."
     - name: currency
       type: string
-      description: "Always 'GBP' — multi-currency conversion happens upstream at Silver."
+      description: "Always 'GBP': every amount is converted with gold_fact_fx_rates_daily. Amounts with no rate are counted in unconverted_count instead."
     - name: system
       type: string
       required: true
@@ -94,63 +109,89 @@ transformations:
   # (vehicle_type lives on the driver, not the trip). All physical LINK reads.
   - phase: pre
     sql: |
-      WITH c AS (
+      WITH fx AS (
+        -- GBP rates by day; GBP itself converts at 1.
+        SELECT rate_date, base_currency AS currency, CAST(rate AS double) AS to_gbp
+        FROM gold_fact_fx_rates WHERE quote_currency = 'GBP'
+      ),
+      c AS (
+        -- Succeeded charges for completed trips, by the day the charge was created, in GBP.
         SELECT to_date(pc.created_at)    AS kpi_date,
                t.city_code               AS city_code,
                dv.vehicle_type           AS vehicle_type,
-               t.driver_id               AS driver_id,
                pc.trip_id                AS trip_id,
                pc.charge_id              AS charge_id,
-               CAST(pc.amount AS double) AS amount
+               CASE WHEN pc.currency = 'GBP' THEN 1.0 ELSE fx.to_gbp END AS to_gbp,
+               CAST(pc.amount AS double) * CASE WHEN pc.currency = 'GBP' THEN 1.0 ELSE fx.to_gbp END AS amount_gbp
         FROM pay_charges pc
         JOIN silver_rideflow_trip_completed t ON pc.trip_id = t.trip_id
         LEFT JOIN mp_drivers dv ON dv.driver_id = t.driver_id
+        LEFT JOIN fx ON fx.rate_date = to_date(pc.created_at) AND fx.currency = pc.currency
+        WHERE pc.status = 'succeeded'
       ),
       agg AS (
         SELECT kpi_date, city_code, vehicle_type,
-               SUM(amount)             AS gross_revenue_amount,
-               COUNT(DISTINCT trip_id) AS trip_count
+               SUM(amount_gbp)                                  AS gross_revenue_amount,
+               COUNT(DISTINCT CASE WHEN amount_gbp IS NOT NULL THEN trip_id END) AS trip_count,
+               COUNT(*) FILTER (WHERE amount_gbp IS NULL)       AS unconverted
         FROM c GROUP BY kpi_date, city_code, vehicle_type
       ),
       rf AS (
+        -- Succeeded refunds against those charges, at the charge day's rate.
         SELECT c.kpi_date, c.city_code, c.vehicle_type,
-               SUM(CAST(r.amount AS double)) AS refund_amount,
-               COUNT(r.refund_id)            AS refund_count
-        FROM c JOIN silver_stripe_refunds r ON r.charge_id = c.charge_id
+               SUM(CAST(r.amount AS double) * c.to_gbp)         AS refund_amount,
+               COUNT(r.refund_id) FILTER (WHERE c.to_gbp IS NOT NULL) AS refund_count,
+               COUNT(*) FILTER (WHERE c.to_gbp IS NULL)         AS unconverted
+        FROM c JOIN silver_stripe_refunds r
+          ON r.charge_id = c.charge_id AND r.status = 'succeeded'
         GROUP BY c.kpi_date, c.city_code, c.vehicle_type
       ),
-      pd AS (
-        SELECT driver_id, SUM(CAST(amount AS double)) AS driver_payout
-        FROM silver_stripe_payouts GROUP BY driver_id
-      ),
       pg AS (
-        SELECT g.kpi_date, g.city_code, g.vehicle_type,
-               SUM(pd.driver_payout) AS driver_payout_amount
-        FROM (SELECT DISTINCT kpi_date, city_code, vehicle_type, driver_id FROM c) g
-        LEFT JOIN pd ON pd.driver_id = g.driver_id
-        GROUP BY g.kpi_date, g.city_code, g.vehicle_type
+        -- Paid payouts by arrival day and the driver's home city / vehicle type, in GBP. Each
+        -- payout is counted once; Stripe payouts carry no trip, so none is spread across trips.
+        SELECT to_date(p.arrival_date) AS kpi_date,
+               dv.city_code            AS city_code,
+               dv.vehicle_type         AS vehicle_type,
+               SUM(CAST(p.amount AS double) * CASE WHEN p.currency = 'GBP' THEN 1.0 ELSE fx.to_gbp END) AS driver_payout_amount,
+               COUNT(*) FILTER (WHERE p.currency <> 'GBP' AND fx.to_gbp IS NULL OR p.currency IS NULL) AS unconverted
+        FROM silver_stripe_payouts p
+        JOIN mp_drivers dv ON dv.driver_id = p.driver_id
+        LEFT JOIN fx ON fx.rate_date = to_date(p.arrival_date) AND fx.currency = p.currency
+        -- An undated paid payout cannot be placed on a day; Silver quarantines it
+        -- (silver_stripe_payouts: paid_payout_has_arrival_date), so none should reach here.
+        WHERE p.status = 'paid' AND p.arrival_date IS NOT NULL
+        GROUP BY to_date(p.arrival_date), dv.city_code, dv.vehicle_type
+      ),
+      k AS (
+        -- Every day/city/vehicle with a charge OR a payout: a payout on a day with no charge in
+        -- that city still lands in a row instead of disappearing.
+        SELECT kpi_date, city_code, vehicle_type FROM agg
+        UNION
+        SELECT kpi_date, city_code, vehicle_type FROM pg
       )
-      SELECT agg.kpi_date,
-             agg.city_code,
-             agg.vehicle_type,
+      SELECT k.kpi_date,
+             k.city_code,
+             k.vehicle_type,
              dd.date_key                                              AS date_key,
              COALESCE(dc.city_master_sk, '-1')                        AS city_sk,
              COALESCE(dv2.vehicle_type_sk, '-1')                      AS vehicle_type_sk,
-             agg.gross_revenue_amount,
-             0.25 * agg.gross_revenue_amount                          AS platform_commission_amount,
+             COALESCE(agg.gross_revenue_amount, 0.0)                  AS gross_revenue_amount,
+             0.25 * COALESCE(agg.gross_revenue_amount, 0.0)           AS platform_commission_amount,
              COALESCE(pg.driver_payout_amount, 0.0)                   AS driver_payout_amount,
              COALESCE(rf.refund_amount, 0.0)                          AS refund_amount,
              CAST(COALESCE(rf.refund_count, 0) AS int)                AS refund_count,
-             agg.gross_revenue_amount - COALESCE(rf.refund_amount,0.0) AS net_revenue_amount,
-             CAST(agg.trip_count AS int)                              AS trip_count,
+             COALESCE(agg.gross_revenue_amount, 0.0) - COALESCE(rf.refund_amount, 0.0) AS net_revenue_amount,
+             CAST(COALESCE(agg.trip_count, 0) AS int)                 AS trip_count,
+             CAST(COALESCE(agg.unconverted, 0) + COALESCE(rf.unconverted, 0) + COALESCE(pg.unconverted, 0) AS int) AS unconverted_count,
              'GBP'                                                    AS currency,
              'stripe'                                                 AS system
-      FROM agg
-      LEFT JOIN rf ON rf.kpi_date=agg.kpi_date AND rf.city_code=agg.city_code AND rf.vehicle_type=agg.vehicle_type
-      LEFT JOIN pg ON pg.kpi_date=agg.kpi_date AND pg.city_code=agg.city_code AND pg.vehicle_type=agg.vehicle_type
-      LEFT JOIN gold_dim_date dd ON dd.full_date = agg.kpi_date
-      LEFT JOIN gold_dim_city_master dc ON dc.city_code = agg.city_code AND dc.is_current = true
-      LEFT JOIN gold_dim_vehicle_type dv2 ON dv2.vehicle_type_code = agg.vehicle_type
+      FROM k
+      LEFT JOIN agg ON agg.kpi_date=k.kpi_date AND agg.city_code IS NOT DISTINCT FROM k.city_code AND agg.vehicle_type IS NOT DISTINCT FROM k.vehicle_type
+      LEFT JOIN rf ON rf.kpi_date=k.kpi_date AND rf.city_code IS NOT DISTINCT FROM k.city_code AND rf.vehicle_type IS NOT DISTINCT FROM k.vehicle_type
+      LEFT JOIN pg ON pg.kpi_date=k.kpi_date AND pg.city_code IS NOT DISTINCT FROM k.city_code AND pg.vehicle_type IS NOT DISTINCT FROM k.vehicle_type
+      LEFT JOIN gold_dim_date dd ON dd.full_date = k.kpi_date
+      LEFT JOIN gold_dim_city_master dc ON dc.city_code = k.city_code AND dc.is_current = true
+      LEFT JOIN gold_dim_vehicle_type dv2 ON dv2.vehicle_type_code = k.vehicle_type
 
 quality:
   row_rules:
@@ -187,6 +228,9 @@ links:
   - name: silver_stripe_payouts
     type: table
     path: "table:`{domain_catalog_prefix}_payments`.silver.silver_stripe_payouts"
+  - name: gold_fact_fx_rates
+    type: table
+    path: "table:`{domain_catalog_prefix}_reference`.{gold_layer}.{gold_layer}_fact_fx_rates_daily"
   - name: gold_dim_date
     type: table
     path: "table:`{domain_catalog_prefix}_reference`.{gold_layer}.{gold_layer}_dim_date"
@@ -198,6 +242,7 @@ links:
     path: "table:`{domain_catalog_prefix}_reference`.{gold_layer}.{gold_layer}_dim_vehicle_type"
 
 upstream:
+  - gold_fact_fx_rates_daily
   - gold_dim_date
   - gold_dim_city_master
   - gold_dim_vehicle_type

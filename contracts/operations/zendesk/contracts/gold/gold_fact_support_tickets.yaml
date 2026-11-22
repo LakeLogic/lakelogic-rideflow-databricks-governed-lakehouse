@@ -263,3 +263,12 @@ source:
 
 metadata:
   run_log_table: '{domain_catalog}.lakelogic_run_log'
+
+# Metrics (ontology-metrics-v1, 2026-11-18): how this table's numbers are computed.
+metrics:
+  - name: Support tickets
+    also_called: [tickets]
+    of: Support ticket
+    expression: COUNT(*)
+    additivity: additive
+    description: Tickets riders and drivers raised with support.

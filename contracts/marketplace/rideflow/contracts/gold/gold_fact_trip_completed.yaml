@@ -237,3 +237,32 @@ source:
 
 metadata:
   run_log_table: '{domain_catalog}.lakelogic_run_log'
+
+# Metrics (ontology-metrics-v1, proof of concept 2026-11-17): how this table's numbers are computed.
+metrics:
+  - name: Completed trips
+    also_called: [trips, completed rides]
+    of: Trip
+    expression: COUNT(*)
+    additivity: additive
+    description: Trips that reached drop-off.
+  - name: Fare total
+    of: Trip
+    expression: SUM(total_fare_amount)
+    additivity: additive
+    description: Fares charged for completed trips, before tips.
+  - name: Tips total
+    of: Trip
+    expression: SUM(total_tip_amount)
+    additivity: additive
+    description: Tips riders added to completed trips.
+  - name: Average fare
+    of: Trip
+    expression: Fare total / Completed trips
+    additivity: non_additive
+    description: The average fare per completed trip.
+  - name: Average distance km
+    of: Trip
+    expression: AVG(total_distance_km)
+    additivity: non_additive
+    description: The average distance of a completed trip, in kilometres.

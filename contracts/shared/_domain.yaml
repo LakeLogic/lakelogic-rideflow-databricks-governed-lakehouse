@@ -1,10 +1,10 @@
 domain: shared
 
 # ── Domain Ownership ────────────────────────────────────────────────────────
-# Cross-domain Gold marts have no single business owner — the platform
-# data engineering team owns the plumbing while consumers (finance, ops,
-# growth) own the metrics. The contact below is the maintainer of the
-# join logic itself, not the business definitions.
+# Platform Data Engineering builds and runs the cross-domain Gold marts. Each mart
+# still names ONE accountable business owner in its own contract (`info.owner`),
+# e.g. Finance for gold_fact_revenue_daily. The contact below maintains the join
+# logic, not the business definitions.
 ownership:
   domain_owner: Platform Data Engineering
   team: data_engineering

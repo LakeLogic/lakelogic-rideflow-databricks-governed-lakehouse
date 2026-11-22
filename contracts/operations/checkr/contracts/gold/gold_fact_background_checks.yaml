@@ -183,3 +183,11 @@ source:
 
 metadata:
   run_log_table: '{domain_catalog}.lakelogic_run_log'
+
+# Metrics (ontology-metrics-v1, 2026-11-18): how this table's numbers are computed.
+metrics:
+  - name: Background checks
+    of: Background check
+    expression: COUNT(*)
+    additivity: additive
+    description: Driver background checks run through Checkr.

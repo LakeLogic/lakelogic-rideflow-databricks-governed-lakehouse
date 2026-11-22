@@ -101,11 +101,9 @@ quality:
     category: completeness
     description: status is always present (never null).
   - name: status_accepted_values
-    sql: status IS NULL OR status IN ('active', 'deleted', 'inactive', 'pending',
-      'suspended')
+    sql: status IS NULL OR status IN ('succeeded', 'pending', 'failed', 'canceled')
     category: validity
-    description: 'status is one of: active, deleted, inactive, pending, suspended
-      when present.'
+    description: 'status is one of Stripe''s states: succeeded, pending, failed, canceled.'
 
 transformations:
 - deduplicate:

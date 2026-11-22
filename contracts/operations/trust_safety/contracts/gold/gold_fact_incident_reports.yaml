@@ -137,3 +137,17 @@ source:
 
 metadata:
   run_log_table: '{domain_catalog}.lakelogic_run_log'
+
+# Metrics (ontology-metrics-v1, 2026-11-18): how this table's numbers are computed.
+metrics:
+  - name: Incident reports
+    also_called: [incidents]
+    of: Incident report
+    expression: COUNT(*)
+    additivity: additive
+    description: Safety incidents reported on trips.
+  - name: Estimated incident cost
+    of: Incident report
+    expression: SUM(estimated_cost)
+    additivity: additive
+    description: The estimated cost of reported incidents.

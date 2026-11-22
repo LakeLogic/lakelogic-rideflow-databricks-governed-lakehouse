@@ -161,3 +161,17 @@ source:
 
 metadata:
   run_log_table: '{domain_catalog}.lakelogic_run_log'
+
+# Metrics (ontology-metrics-v1, 2026-11-18): how this table's numbers are computed.
+metrics:
+  - name: Charges
+    also_called: [rider payments]
+    of: Charge
+    expression: COUNT(*)
+    additivity: additive
+    description: Card charges taken from riders through Stripe.
+  - name: Charge amount total
+    of: Charge
+    expression: SUM(charge_amount)
+    additivity: additive
+    description: The amount charged to riders. Summed as stored, not converted between currencies.

@@ -101,12 +101,14 @@ quality:
     sql: status IS NOT NULL
     category: completeness
     description: status is always present (never null).
+  - name: paid_payout_has_arrival_date
+    sql: status IS NULL OR status <> 'paid' OR arrival_date IS NOT NULL
+    category: completeness
+    description: A paid payout always has an arrival date, so daily revenue can place it on a day.
   - name: status_accepted_values
-    sql: status IS NULL OR status IN ('active', 'deleted', 'inactive', 'pending',
-      'suspended')
+    sql: status IS NULL OR status IN ('paid', 'pending', 'in_transit', 'canceled', 'failed')
     category: validity
-    description: 'status is one of: active, deleted, inactive, pending, suspended
-      when present.'
+    description: 'status is one of Stripe''s states: paid, pending, in_transit, canceled, failed.'
 
 transformations:
 - deduplicate:
