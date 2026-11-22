@@ -139,3 +139,11 @@ source:
 
 metadata:
   run_log_table: '{domain_catalog}.lakelogic_run_log'
+
+# Metrics (ontology-metrics-v1, 2026-11-18): how this table's numbers are computed.
+metrics:
+  - name: Insurance certificates
+    of: Insurance certificate
+    expression: COUNT(*)
+    additivity: additive
+    description: Insurance certificates drivers supplied at onboarding.

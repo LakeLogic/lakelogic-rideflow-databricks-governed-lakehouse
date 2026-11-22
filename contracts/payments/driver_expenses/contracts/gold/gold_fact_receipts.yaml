@@ -163,3 +163,21 @@ source:
 
 metadata:
   run_log_table: '{domain_catalog}.lakelogic_run_log'
+
+# Metrics (ontology-metrics-v1, 2026-11-18): how this table's numbers are computed.
+metrics:
+  - name: Expense receipts
+    of: Receipt
+    expression: COUNT(*)
+    additivity: additive
+    description: Expense receipts drivers submitted.
+  - name: Expense total
+    of: Receipt
+    expression: SUM(total_amount)
+    additivity: additive
+    description: The total on drivers' expense receipts, VAT included.
+  - name: Expense VAT total
+    of: Receipt
+    expression: SUM(vat_amount)
+    additivity: additive
+    description: The VAT on drivers' expense receipts.

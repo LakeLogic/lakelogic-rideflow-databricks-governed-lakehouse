@@ -21,6 +21,11 @@ variables:
     description: Optional external storage for the landing Volumes (<root>/landing_<domain>). Blank
       (default) = managed Volumes inside Databricks; the seed job writes the sample files into them.
     default: ''
+  metadata_reader:
+    description: The principal LakeLogic scans as (a service principal's APPLICATION ID, not its
+      display name). Setup grants it USE CATALOG, USE SCHEMA, BROWSE, SELECT and READ VOLUME on
+      each catalog it provisions. Blank = grant nothing. Not a secret.
+    default: ''
   catalog_storage_root:
     description: Storage location for a catalog setup creates (MANAGED LOCATION <root>/<catalog>).
       Blank = the metastore's own storage.
@@ -58,6 +63,7 @@ targets:
     default: true
     variables:
       catalog: rideflow_dev
+      metadata_reader: d30af1f7-37f5-4e84-b35e-985580180224  # lakelogic-ci
       # Blank = the metastore's own storage. If your metastore has no storage root, setup needs a
       # location for each catalog it creates: pass yours at deploy time rather than committing it,
       # e.g. BUNDLE_VAR_catalog_storage_root=abfss://<container>@<account>.dfs.core.windows.net/<path>

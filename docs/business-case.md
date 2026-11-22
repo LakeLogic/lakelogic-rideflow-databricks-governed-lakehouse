@@ -50,35 +50,50 @@ Each system lands its files in its own folder, moves through Bronze (as received
 
 ## Business ontology
 
-The systems above are where data comes from. The ontology is what the business talks about: the things RideFlow counts, how they relate, and which contract is the system of record for each. It is read from the keys the Silver contracts actually carry, so it describes the estate as built.
+The systems above are where data comes from. The business map is what the business talks about: RideFlow's main concepts, their owners and the data contracts that hold them. The concepts and relationships are curated by hand; the identifier counts come from the contracts. Missing links are questions for the owning teams.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/rideflow_ontology_dark.svg">
   <img alt="RideFlow business ontology: Trip at the centre, joined to Rider, Driver, City and Charge; each circle sized by how many Silver contracts carry its key, coloured by owning domain" src="images/rideflow_ontology_light.svg" width="640">
 </picture>
 
-*Circle size is how many Silver contracts carry the entity's key: Driver appears in 11, Rider in 9, City in 8, Trip in 6. The bigger the circle, the more of the estate depends on that concept being defined once and correctly. Colour is the owning domain; labels on lines name the joining key.*
+*Circle size is how many Silver contracts contain the concept's identifier: `driver_id` appears in 11, `rider_id` in 9, `city_code` in 8, `trip_id` in 6. A shared column name is a hint, not proof of a valid join or of the same meaning; each relationship below says how it joins and whether a person has confirmed it. Colour is the owning domain; labels on lines name the joining key.*
 
 ### Core entities
 
-| Entity | Meaning | Key | Owner | System of record |
-| --- | --- | --- | --- | --- |
-| Rider | A person who books trips | `rider_id` | Marketplace | [`silver_rideflow_rider_profiles`](../contracts/marketplace/rideflow/contracts/silver/silver_rideflow_rider_profiles.yaml) |
-| Driver | A person approved to drive, with a home city and vehicle type | `driver_id` | Marketplace | [`silver_rideflow_driver_profiles`](../contracts/marketplace/rideflow/contracts/silver/silver_rideflow_driver_profiles.yaml) |
-| Trip request | A rider asking for a ride; may never become a trip | request key | Marketplace | [`silver_rideflow_trip_requests`](../contracts/marketplace/rideflow/contracts/silver/silver_rideflow_trip_requests.yaml) |
-| Trip | A completed ride by one driver for one rider | `trip_id` | Marketplace | [`silver_rideflow_trip_completed`](../contracts/marketplace/rideflow/contracts/silver/silver_rideflow_trip_completed.yaml) |
-| Cancellation | A trip that ended before completion, with a reason | `trip_id` | Marketplace | [`silver_rideflow_trip_cancellations`](../contracts/marketplace/rideflow/contracts/silver/silver_rideflow_trip_cancellations.yaml) |
-| Charge | Money taken from a rider for a trip | `charge_id` | Payments | [`silver_stripe_charges`](../contracts/payments/stripe/contracts/silver/silver_stripe_charges.yaml) |
-| Refund | Money returned against a charge | `charge_id` | Payments | [`silver_stripe_refunds`](../contracts/payments/stripe/contracts/silver/silver_stripe_refunds.yaml) |
-| Payout | Money paid to a driver | `driver_id` | Payments | [`silver_stripe_payouts`](../contracts/payments/stripe/contracts/silver/silver_stripe_payouts.yaml) |
-| Expense receipt | A driver's expense claim, read from a photo | `driver_id` | Payments | [`silver_driver_expenses_receipts`](../contracts/payments/driver_expenses/contracts/silver/silver_driver_expenses_receipts.yaml) |
-| Background check | A Checkr screening result for a driver | `driver_id` | Operations | [`silver_checkr_background_checks`](../contracts/operations/checkr/contracts/silver/silver_checkr_background_checks.yaml) |
-| Driver document | A driving licence or insurance certificate, read from a PDF or image | `driver_id` | Operations | [`onboarding`](../contracts/operations/onboarding/contracts/silver/) |
-| Safety incident | A Trust & Safety report about a driver or trip | `trip_id`, `driver_id` | Operations | [`silver_trust_safety_incident_reports`](../contracts/operations/trust_safety/contracts/silver/silver_trust_safety_incident_reports.yaml) |
-| Support ticket | A Zendesk ticket, linked to the rider, driver, trip or charge it concerns | `trip_id`, `charge_id` | Operations | [`silver_zendesk_support_tickets`](../contracts/operations/zendesk/contracts/silver/silver_zendesk_support_tickets.yaml) |
-| Campaign | A paid or owned marketing campaign | `campaign_id` | Marketing | Google Ads, Meta Ads, HubSpot Silver contracts |
-| City | A market RideFlow operates in | `city_code` | Reference | [`gold_dim_city_master`](../contracts/reference/internal/contracts/gold/gold_dim_city_master.yaml) |
-| Vehicle type | The class of car a driver operates | vehicle type code | Reference | [`gold_dim_vehicle_type`](../contracts/reference/internal/contracts/gold/gold_dim_vehicle_type.yaml) |
+The **identifier** is the entity's own key. The **canonical contract** is the LakeLogic contract that holds the cleaned record; the **source system** is where it originates.
+
+| Entity | Meaning | Identifier | Owner | Source system | Canonical contract |
+| --- | --- | --- | --- | --- | --- |
+| Rider | A person who books trips | `rider_id` | Marketplace | RideFlow app | [`silver_rideflow_rider_profiles`](../contracts/marketplace/rideflow/contracts/silver/silver_rideflow_rider_profiles.yaml) |
+| Driver | A person approved to drive, with a home city and vehicle type | `driver_id` | Marketplace | RideFlow app | [`silver_rideflow_driver_profiles`](../contracts/marketplace/rideflow/contracts/silver/silver_rideflow_driver_profiles.yaml) |
+| Trip request | A rider asking for a ride; may never become a trip | request key | Marketplace | RideFlow app | [`silver_rideflow_trip_requests`](../contracts/marketplace/rideflow/contracts/silver/silver_rideflow_trip_requests.yaml) |
+| Trip | A completed ride by one driver for one rider | `trip_id` | Marketplace | RideFlow app | [`silver_rideflow_trip_completed`](../contracts/marketplace/rideflow/contracts/silver/silver_rideflow_trip_completed.yaml) |
+| Cancellation | A trip that ended before completion, with a reason | `trip_id` | Marketplace | RideFlow app | [`silver_rideflow_trip_cancellations`](../contracts/marketplace/rideflow/contracts/silver/silver_rideflow_trip_cancellations.yaml) |
+| Charge | Money taken from a rider for a trip | `charge_id` | Payments | Stripe | [`silver_stripe_charges`](../contracts/payments/stripe/contracts/silver/silver_stripe_charges.yaml) |
+| Refund | Money returned against a charge | `refund_id` | Payments | Stripe | [`silver_stripe_refunds`](../contracts/payments/stripe/contracts/silver/silver_stripe_refunds.yaml) |
+| Payout | Money paid to a driver | `payout_id` | Payments | Stripe | [`silver_stripe_payouts`](../contracts/payments/stripe/contracts/silver/silver_stripe_payouts.yaml) |
+| Expense receipt | A driver's expense claim, read from a photo | receipt key | Payments | Driver expenses | [`silver_driver_expenses_receipts`](../contracts/payments/driver_expenses/contracts/silver/silver_driver_expenses_receipts.yaml) |
+| Background check | A Checkr screening result for a driver | check key | Operations | Checkr | [`silver_checkr_background_checks`](../contracts/operations/checkr/contracts/silver/silver_checkr_background_checks.yaml) |
+| Driver document | A driving licence or insurance certificate, read from a PDF or image | document key | Operations | Onboarding | [`onboarding`](../contracts/operations/onboarding/contracts/silver/) |
+| Safety incident | A Trust & Safety report about a driver or trip | incident key | Operations | Trust & Safety | [`silver_trust_safety_incident_reports`](../contracts/operations/trust_safety/contracts/silver/silver_trust_safety_incident_reports.yaml) |
+| Support ticket | A Zendesk ticket about a rider, driver, trip or charge | ticket key | Operations | Zendesk | [`silver_zendesk_support_tickets`](../contracts/operations/zendesk/contracts/silver/silver_zendesk_support_tickets.yaml) |
+| Campaign | A paid or owned marketing campaign | `campaign_id` | Marketing | Google Ads, Meta Ads, HubSpot | Google Ads, Meta Ads, HubSpot Silver contracts |
+| City | A market RideFlow operates in | `city_code` | Reference | Internal | [`gold_dim_city_master`](../contracts/reference/internal/contracts/gold/gold_dim_city_master.yaml) |
+| Vehicle type | The class of car a driver operates | vehicle type code | Reference | Internal | [`gold_dim_vehicle_type`](../contracts/reference/internal/contracts/gold/gold_dim_vehicle_type.yaml) |
+
+### Relationships
+
+Each relationship is a business sentence with the keys that join it. None is confirmed yet by the owning teams; confirming one records it in that domain's `_domain.yaml`.
+
+| Relationship | Joins on | Expected cardinality | Status |
+| --- | --- | --- | --- |
+| Rider books Trip | `rider_id` | one rider, many trips | curated |
+| Driver completes Trip | `driver_id` | one driver, many trips | curated |
+| Trip happens in City | `city_code` | one city, many trips | curated |
+| Charge pays for Trip | `trip_id` | one trip, at most one charge | curated |
+| Refund reverses part of Charge | `charge_id` | one charge, many refunds | curated |
+| Payout pays Driver | `driver_id` | one driver, many payouts; not linked to trips | curated |
 
 ### Shared vocabulary
 
@@ -86,8 +101,9 @@ These are the terms reports use. Each is defined once, in the contract named, so
 
 | Term | Definition | Defined in |
 | --- | --- | --- |
-| Gross revenue | Sum of charges for completed trips, by the day the charge was created | `gold_fact_revenue_daily` |
-| Net revenue | Gross revenue minus refunds on those charges | `gold_fact_revenue_daily` |
+| Gross revenue | Sum of **succeeded** charges for completed trips, by the day the charge was created, in GBP | `gold_fact_revenue_daily` |
+| Net revenue | Gross revenue minus **succeeded** refunds on those charges, in GBP | `gold_fact_revenue_daily` |
+| Driver payouts | **Paid** payouts by arrival day, attributed to the driver's home city and vehicle type; not matched to individual trips | `gold_fact_revenue_daily` |
 | Platform commission | RideFlow's take: 25% of gross revenue | `gold_fact_revenue_daily` |
 | Requested trips, completed trips, cancellation rate | Activity by city and request date | `gold_mart_marketplace_health` |
 | Acquisition cost | Ad spend divided by attributed new riders, per day, channel and campaign | `gold_mart_acquisition_cost` |
@@ -110,11 +126,11 @@ Use this when you have ten minutes and one person from finance or data in the ro
 
 Finance's Monday report shows net revenue by city. The finance lead asks the question every data team has heard: *"Where does this number come from, and why should I trust it?"*
 
-Open [`gold_fact_revenue_daily`](../contracts/shared/shared/contracts/gold/gold_fact_revenue_daily.yaml). The answer is written down, not tribal: gross revenue is the sum of Stripe charges, joined to completed trips by `trip_id`; net revenue is gross minus refunds; one row per day, city and vehicle type.
+Open [`gold_fact_revenue_daily`](../contracts/shared/shared/contracts/gold/gold_fact_revenue_daily.yaml). The answer is written down, not tribal: gross revenue is the sum of succeeded Stripe charges, joined to completed trips by `trip_id`; net revenue is gross minus succeeded refunds; one row per day, city and vehicle type, in GBP. Every amount is converted with that day's rate from `gold_fact_fx_rates_daily`; an amount with no rate is left out and counted in `unconverted_count`, never guessed.
 
 ### 2. Who owns the inputs
 
-The charges come from Payments. Open [`payments/_domain.yaml`](../contracts/payments/_domain.yaml): the owner is Finance Engineering, with a named contact and alert channels. Trips come from Marketplace, owned by Platform Data Engineering. The revenue product itself sits in Shared, and its domain file says why: cross-domain products have no single business owner, so the platform team owns the plumbing and Finance consumes it.
+The charges come from Payments. Open [`payments/_domain.yaml`](../contracts/payments/_domain.yaml): the owner is Finance Engineering, with a named contact and alert channels. Trips come from Marketplace, owned by Platform Data Engineering. The revenue product itself sits in Shared: Platform Data Engineering builds and runs it, and Finance is the accountable business owner who signs off what "revenue" means.
 
 *Talking point:* when the number is wrong, you know who to call before you open a notebook.
 

@@ -139,3 +139,17 @@ source:
 
 metadata:
   run_log_table: '{domain_catalog}.lakelogic_run_log'
+
+# Metrics (ontology-metrics-v1, 2026-11-18): how this table's numbers are computed.
+metrics:
+  - name: Payouts
+    also_called: [driver payouts]
+    of: Payout
+    expression: COUNT(*)
+    additivity: additive
+    description: Payouts sent to drivers through Stripe.
+  - name: Payout amount total
+    of: Payout
+    expression: SUM(payout_amount)
+    additivity: additive
+    description: The amount paid out to drivers. Summed as stored, not converted between currencies.

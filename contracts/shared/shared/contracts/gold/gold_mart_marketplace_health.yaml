@@ -29,11 +29,11 @@ model:
       required: true
     - name: date_key
       type: integer
-      required: true
+      required: false
       foreign_key:
         contract: gold_dim_date
         column: date_key
-      description: Key of the date dimension for kpi_date (YYYYMMDD), read from gold_dim_date.
+      description: Key of the date dimension for kpi_date (YYYYMMDD), read from gold_dim_date; empty when the dimension has no row for that day.
     - name: city_sk
       type: string
       required: true

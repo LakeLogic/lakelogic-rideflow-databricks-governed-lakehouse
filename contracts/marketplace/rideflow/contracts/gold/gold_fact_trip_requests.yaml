@@ -185,3 +185,22 @@ source:
 
 metadata:
   run_log_table: '{domain_catalog}.lakelogic_run_log'
+
+# Metrics (ontology-metrics-v1, proof of concept 2026-11-17): how this table's numbers are computed.
+metrics:
+  - name: Trip requests
+    also_called: [requests, ride requests]
+    of: Trip request
+    expression: COUNT(*)
+    additivity: additive
+    description: Ride and delivery requests riders made, whether or not a trip followed.
+  - name: Estimated fare total
+    of: Trip request
+    expression: SUM(estimated_fare_total)
+    additivity: additive
+    description: The fares quoted to riders when they requested, summed.
+  - name: Average estimated fare
+    of: Trip request
+    expression: Estimated fare total / Trip requests
+    additivity: non_additive
+    description: The average fare quoted per request.

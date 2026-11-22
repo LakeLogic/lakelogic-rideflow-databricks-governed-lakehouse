@@ -107,6 +107,7 @@ dbutils.widgets.text("volume_schema", "nondelta", "volume_schema")        # sche
 dbutils.widgets.text("catalog_storage_root", "", "catalog_storage_root")  # MANAGED LOCATION root for a catalog created here; blank = the metastore's
 dbutils.widgets.text("landing_storage_root", "", "landing_storage_root")  # EXTERNAL storage for the landing Volumes: <root>/landing_<domain>; blank = managed (empty)
 dbutils.widgets.text("landing_runtime", "", "landing_runtime")  # where landing files come from (Deliver data-source step); blank = the registry's own path
+dbutils.widgets.text("metadata_reader", "", "metadata_reader")  # principal LakeLogic scans as (a service principal's APPLICATION ID); blank = grant nothing
 
 # Read them.
 environment = dbutils.widgets.get("environment")
@@ -116,6 +117,7 @@ volume_schema = dbutils.widgets.get("volume_schema")
 catalog_storage_root = dbutils.widgets.get("catalog_storage_root")
 landing_storage_root = dbutils.widgets.get("landing_storage_root").strip().rstrip("/")
 landing_runtime = dbutils.widgets.get("landing_runtime")
+metadata_reader = dbutils.widgets.get("metadata_reader").strip()
 
 # COMMAND ----------
 
@@ -501,6 +503,21 @@ try:
             continue
         os.makedirs(root, exist_ok=True)
         print(f"  ok {root}")
+
+    # The principal LakeLogic scans as reads every catalog setup provisions. READ VOLUME is the
+    # one that was missing: without it Unity Catalog LISTS NO VOLUMES AT ALL (not an error), so
+    # Discovery showed every catalog's volumes as "none visible" (2026-11-17). Granted on the
+    # catalog, so it covers each volume, including ones created later. A rebuilt catalog loses
+    # its grants, which is why they live here and not only in the Catalog Explorer.
+    # A service principal is named by its APPLICATION ID in SQL, not its display name.
+    if metadata_reader:
+        for cat in catalogs:
+            try:
+                _sql(f"GRANT USE CATALOG, USE SCHEMA, BROWSE, SELECT, READ VOLUME ON CATALOG `{cat}` TO `{metadata_reader}`")
+                print(f"  ok read access on `{cat}` for the LakeLogic scanner")
+            except Exception as exc:
+                print(f"  ! could not grant read access on `{cat}`: {str(exc).splitlines()[0][:160]} "
+                      "(the job's identity must own the catalog or hold MANAGE on it)")
 
     # Seeds are written only after the Volumes above exist.
     for registry in registries:
