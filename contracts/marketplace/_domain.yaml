@@ -194,3 +194,44 @@ products:
     - id: fact_surge_pricing_inference
       name: Surge Pricing Inference
       kind: table
+relationships:
+- from: Driver
+  verb: is screened by
+  to: Background check
+  cardinality: one_to_many
+- from: Driver
+  verb: generates
+  to: Driver telemetry
+  cardinality: one_to_many
+- from: Driver
+  verb: raises
+  to: Support ticket
+  cardinality: one_to_many
+- from: Driver
+  verb: is named in
+  to: Trip cancellation
+  cardinality: one_to_many
+- from: Driver
+  verb: carries out
+  to: Trip completed
+  cardinality: one_to_many
+- from: Rider
+  verb: generates
+  to: Rider app event
+  cardinality: one_to_many
+- from: Rider
+  verb: raises
+  to: Support ticket
+  cardinality: one_to_many
+- from: Rider
+  verb: cancels
+  to: Trip cancellation
+  cardinality: one_to_many
+- from: Rider
+  verb: takes
+  to: Trip completed
+  cardinality: one_to_many
+- from: Rider
+  verb: places
+  to: Trip request
+  cardinality: one_to_many

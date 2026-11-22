@@ -252,6 +252,7 @@ metrics:
     additivity: additive
     description: Fares charged for completed trips, before tips.
   - name: Tips total
+    also_called: [tips, gratuities]
     of: Trip
     expression: SUM(total_tip_amount)
     additivity: additive
