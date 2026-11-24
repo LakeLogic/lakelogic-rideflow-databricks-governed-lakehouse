@@ -14,7 +14,7 @@ ownership:
     role: oncall
     email: revenue-ops-data@rideflow.com
   cost_center: revenue_operations
-  jira_project: REVOPS
+  jira_project: BUS
 
 # ── Compliance & Privacy ─────────────────────────────────────────────────────
 # Salesforce holds B2B customer contacts (names, emails, phones): personal data processed to

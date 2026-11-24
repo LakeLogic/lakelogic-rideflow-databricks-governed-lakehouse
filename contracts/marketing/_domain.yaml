@@ -14,7 +14,7 @@ ownership:
     role: oncall
     email: growth-data@rideflow.com
   cost_center: growth_marketing
-  jira_project: GROWTH
+  jira_project: MKTG
 
 # ── Service Level Objectives (SLOs) ──────────────────────────────────────
 slo:

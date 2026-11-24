@@ -14,7 +14,7 @@ ownership:
     role: oncall
     email: ${DOMAIN_CONTACT_MARKETPLACE}
   cost_center: platform_engineering
-  jira_project: KAN
+  jira_project: MKTPL
 
 # ── Service Level Objectives (SLOs) ──────────────────────────────────────
 slo:
