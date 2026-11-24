@@ -14,7 +14,7 @@ ownership:
     role: oncall
     email: trust-safety-data@rideflow.com
   cost_center: trust_safety
-  jira_project: OPSDATA
+  jira_project: OPS
 
 # ── Service Level Objectives (SLOs) ──────────────────────────────────────
 slo:

@@ -14,7 +14,7 @@ ownership:
     role: oncall
     email: finance-data@rideflow.com
   cost_center: finance_ops
-  jira_project: PAYMENTS
+  jira_project: PAY
 
 # ── Service Level Objectives (SLOs) ──────────────────────────────────────
 slo:

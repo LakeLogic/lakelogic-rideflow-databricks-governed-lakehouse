@@ -17,7 +17,7 @@ ownership:
     role: oncall
     email: ${DOMAIN_CONTACT_REFERENCE:-${DOMAIN_CONTACT_MARKETPLACE}}
   cost_center: platform_engineering
-  jira_project: KAN
+  jira_project: DPLAT
 
 # ── Service Level Objectives (SLOs) ──────────────────────────────────────
 # Reference data changes infrequently — looser freshness, stricter quality.

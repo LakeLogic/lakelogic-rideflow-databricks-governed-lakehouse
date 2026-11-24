@@ -13,7 +13,7 @@ ownership:
     role: oncall
     email: ${DOMAIN_CONTACT_SHARED:-${DOMAIN_CONTACT_MARKETPLACE}}
   cost_center: platform_engineering
-  jira_project: KAN
+  jira_project: DPLAT
 
 # ── Service Level Objectives (SLOs) ──────────────────────────────────────
 # Shared marts read from already-validated Silver contracts, so freshness
