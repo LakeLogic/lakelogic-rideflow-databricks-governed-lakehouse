@@ -235,3 +235,13 @@ relationships:
   verb: places
   to: Trip request
   cardinality: one_to_many
+concepts:
+  Driver:
+    definition: Driver profiles for the Rideflow marketplace hold each driver's identity
+      and contact details — full name, email, phone, date of birth, home address,
+      driving licence number and vehicle registration plate — alongside the vehicle
+      category they operate and the last four digits of their payout bank account.
+      Operational fields record the city market they work in, when they signed up,
+      their current account status and their average customer rating, with a last-updated
+      timestamp showing how current each record is.
+    identifier: driver_id
