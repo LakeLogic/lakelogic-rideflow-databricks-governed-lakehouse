@@ -235,3 +235,13 @@ relationships:
   verb: places
   to: Trip request
   cardinality: one_to_many
+concepts:
+  Rider:
+    definition: Rider account records from the Rideflow marketplace, one row per rider,
+      linking each person to their trips, payments and support history. The profile
+      carries personal data — full name, email address, phone number, date of birth
+      and home address — alongside the city code they are associated with, the date
+      they signed up and their current account status. Preferred payment method and
+      the timestamp of the last profile change support billing and keep the record's
+      currency visible.
+    identifier: rider_id
