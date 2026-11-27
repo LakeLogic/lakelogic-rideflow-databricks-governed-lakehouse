@@ -235,3 +235,10 @@ relationships:
   verb: places
   to: Trip request
   cardinality: one_to_many
+- from: Trip completed
+  verb: is billed by
+  to: Charge
+  cardinality: one_to_many
+  x-columns:
+    Charge: trip_id
+    Trip completed: trip_id
