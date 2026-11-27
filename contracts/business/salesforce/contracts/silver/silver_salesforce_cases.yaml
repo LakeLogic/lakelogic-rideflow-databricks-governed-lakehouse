@@ -98,3 +98,8 @@ source:
 
 metadata:
   run_log_table: '{domain_catalog}.lakelogic_run_log'
+metrics:
+- name: Cases
+  expression: COUNT(*)
+  of: Case
+  description: Support cases logged in Salesforce, one row per case.
