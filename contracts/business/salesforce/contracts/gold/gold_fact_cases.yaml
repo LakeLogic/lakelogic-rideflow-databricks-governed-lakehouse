@@ -198,3 +198,21 @@ source:
 
 metadata:
   run_log_table: '{domain_catalog}.lakelogic_run_log'
+metrics:
+- name: Average days to close
+  also_called:
+  - Mean time to resolution
+  - Average resolution time
+  - MTTR
+  of: Case
+  expression: AVG(DATEDIFF(day, CAST(CreatedDate AS date), ClosedDate))
+  unit: days
+  additivity: non_additive
+  description: Average number of days between case creation and closure, for cases
+    that have been closed.
+  date_column: CreatedDate
+  dimensions:
+  - Priority_sk
+  - Origin_sk
+  - account_sk
+  - system
