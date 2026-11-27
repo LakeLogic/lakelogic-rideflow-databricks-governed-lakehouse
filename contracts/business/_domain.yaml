@@ -58,3 +58,11 @@ concepts:
     - Company
     - Customer account
     - Organisation
+relationships:
+- from: Business account
+  verb: raises
+  to: Case
+  cardinality: one_to_many
+  columns:
+    Case: AccountId
+    Business account: Id
