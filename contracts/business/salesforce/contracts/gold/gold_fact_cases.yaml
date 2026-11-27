@@ -198,3 +198,36 @@ source:
 
 metadata:
   run_log_table: '{domain_catalog}.lakelogic_run_log'
+metrics:
+- name: Closed cases
+  also_called:
+  - Resolved cases
+  - Cases closed
+  - Closures
+  of: Case
+  expression: COUNT(DISTINCT CASE WHEN ClosedDate IS NOT NULL THEN Id END)
+  additivity: additive
+  description: Number of cases that have a recorded closure date.
+  date_column: ClosedDate
+  dimensions:
+  - Status_sk
+  - Priority_sk
+  - Origin_sk
+  - account_sk
+  - system
+- name: Total cases
+  also_called:
+  - Case volume
+  - Case count
+  - Number of cases
+  of: Case
+  expression: COUNT(DISTINCT Id)
+  additivity: additive
+  description: Total number of support cases created in the selected period.
+  date_column: CreatedDate
+  dimensions:
+  - Status_sk
+  - Priority_sk
+  - Origin_sk
+  - account_sk
+  - system
