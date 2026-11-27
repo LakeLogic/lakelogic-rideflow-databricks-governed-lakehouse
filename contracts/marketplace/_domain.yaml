@@ -239,6 +239,6 @@ relationships:
   verb: is billed by
   to: Charge
   cardinality: one_to_many
-  columns:
+  x-columns:
     Charge: trip_id
     Trip completed: trip_id
