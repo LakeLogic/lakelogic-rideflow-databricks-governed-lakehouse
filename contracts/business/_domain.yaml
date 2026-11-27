@@ -63,6 +63,6 @@ relationships:
   verb: raises
   to: Case
   cardinality: one_to_many
-  columns:
+  x-columns:
     Case: AccountId
     Business account: Id
