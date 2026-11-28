@@ -1,6 +1,6 @@
 # RideFlow: A governed data mesh on Databricks
 
-**Decentralised ownership, shared governance, one set of contracts.**
+**Build a decentralised Databricks lakehouse with shared governance.**
 
 A runnable reference project for reporting, analytics and AI, powered by LakeLogic and executable data contracts.
 
