@@ -1,12 +1,14 @@
 # RideFlow: Data Platform Architecture on Databricks
 
-**Build a decentralised Databricks lakehouse with shared governance.**
+**Build a decentralised Databricks lakehouse with shared governance**
 
-Businesses need data they can trust, but ingestion, transformation and quality checks are often implemented differently across teams. Ownership is unclear, governance is inconsistent, and every new source adds more custom code to maintain. **LakeLogic Core standardises ingestion, transformation, validation and materialisation through executable data contracts**, giving domain teams a consistent way to deliver governed data products.
+A runnable reference project for reporting, analytics and AI, powered by LakeLogic and executable data contracts.
 
-RideFlow demonstrates this in a decentralised Databricks lakehouse: CSV and JSON exports alongside PDFs, images and Word documents, processed through batch pipelines and Spark Structured Streaming.
+Every new source adds engineering work. When teams build ingestion, transformation and quality checks differently, maintenance grows, governance drifts, and reports and AI applications inherit the gaps.
 
-This synthetic reference project uses **Unity Catalog, Delta Lake and Databricks Workflows**, with **158 contracts across seven domains** and Bronze, Silver and Gold layers.
+**LakeLogic Core standardises ingestion, transformation, validation and materialisation through executable data contracts.** Schemas, ownership, quality rules and service levels live beside the processing, with agreed metrics and business concepts that people and AI agents read the same way.
+
+RideFlow is a fictional ride-hailing business: seven domains, Bronze, Silver and Gold layers, CSV and JSON exports alongside PDFs, images and Word documents, run as batch pipelines and Spark Structured Streaming on **Unity Catalog, Delta Lake and Databricks Workflows**.
 
 ## Architecture
 

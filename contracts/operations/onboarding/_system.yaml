@@ -7,6 +7,11 @@ domain: operations
 
 system: onboarding
 
+source_system:
+  name: Driver onboarding documents
+  kind: file_drop
+  formats: [pdf, image]
+
 storage_mode: catalog
 
 metadata:

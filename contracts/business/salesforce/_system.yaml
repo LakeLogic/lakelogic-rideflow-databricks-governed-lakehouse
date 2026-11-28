@@ -7,6 +7,12 @@ domain: business
 
 system: salesforce
 
+source_system:
+  name: Salesforce CRM
+  kind: saas_api
+  vendor: Salesforce
+  formats: [json]
+
 storage_mode: catalog
 
 metadata:

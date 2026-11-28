@@ -7,6 +7,11 @@ domain: payments
 
 system: driver_expenses
 
+source_system:
+  name: Driver expense receipts
+  kind: file_drop
+  formats: [image]
+
 storage_mode: catalog
 
 metadata:

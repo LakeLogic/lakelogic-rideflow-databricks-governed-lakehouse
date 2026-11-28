@@ -7,6 +7,12 @@ domain: payments
 
 system: stripe
 
+source_system:
+  name: Stripe
+  kind: saas_api
+  vendor: Stripe
+  formats: [csv]
+
 storage_mode: catalog
 
 metadata:
