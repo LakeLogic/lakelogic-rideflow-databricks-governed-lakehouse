@@ -96,3 +96,14 @@ source:
 
 metadata:
   run_log_table: '{domain_catalog}.lakelogic_run_log'
+
+downstream:
+  - name: Daily driver payouts to finance ERP
+    type: feed
+    destination: netsuite
+    format: csv
+    delivery: sftp
+    path: /outbound/payouts/
+    refresh: daily 02:00 UTC
+    owner: Finance Engineering
+    columns_used: [activity_date, payout_amount]

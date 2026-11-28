@@ -7,6 +7,12 @@ domain: operations
 
 system: zendesk
 
+source_system:
+  name: Zendesk
+  kind: saas_api
+  vendor: Zendesk
+  formats: [csv]
+
 storage_mode: catalog
 
 metadata:

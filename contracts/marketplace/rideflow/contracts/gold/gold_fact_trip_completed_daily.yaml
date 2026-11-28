@@ -128,3 +128,13 @@ source:
 
 metadata:
   run_log_table: '{domain_catalog}.lakelogic_run_log'
+
+downstream:
+  - name: City partner trip extract
+    type: feed
+    destination: city_transport_authority
+    format: json
+    delivery: api
+    refresh: daily 06:00 UTC
+    owner: Data Engineering
+    columns_used: [activity_date, total_distance_km, total_duration_minutes]

@@ -7,6 +7,12 @@ domain: operations
 
 system: checkr
 
+source_system:
+  name: Checkr background checks
+  kind: saas_api
+  vendor: Checkr
+  formats: [csv, pdf]
+
 storage_mode: catalog
 
 metadata:

@@ -7,6 +7,11 @@ domain: reference
 
 system: internal
 
+source_system:
+  name: Internal reference data
+  kind: file_drop
+  formats: [csv]
+
 storage_mode: catalog
 
 metadata:
