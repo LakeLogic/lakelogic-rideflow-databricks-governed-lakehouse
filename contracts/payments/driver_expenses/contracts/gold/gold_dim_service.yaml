@@ -65,3 +65,17 @@ source:
 
 metadata:
   run_log_table: '{domain_catalog}.lakelogic_run_log'
+metrics:
+- name: Distinct service count
+  also_called:
+  - Number of services
+  - Service catalogue size
+  - Unique services
+  of: Service
+  aggregation: count_distinct
+  expr: service
+  additivity: non_additive
+  description: Count of distinct services known to the system, excluding the unknown
+    member.
+  dimensions:
+  - system
