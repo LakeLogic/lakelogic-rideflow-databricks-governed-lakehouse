@@ -186,7 +186,6 @@ source:
 metadata:
   run_log_table: '{domain_catalog}.lakelogic_run_log'
 
-# Metrics (ontology-metrics-v1, proof of concept 2026-11-17): how this table's numbers are computed.
 metrics:
   - name: Trip requests
     also_called: [requests, ride requests]
