@@ -123,3 +123,35 @@ transformations:
   derive:
     field: system
     sql: '''salesforce'''
+metrics:
+- name: Total Accounts
+  also_called:
+  - account count
+  - number of accounts
+  - distinct accounts
+  of: Account
+  expression: COUNT(DISTINCT accounts_sk) FILTER (WHERE is_current = TRUE)
+  additivity: additive
+  description: Count of currently active account dimension records (is_current = TRUE),
+    deduplicated by surrogate key to exclude historical SCD2 versions.
+  date_column: effective_from
+  dimensions:
+  - Type
+  - Industry
+  - BillingCountry
+- name: Account versions
+  also_called:
+  - SCD2 rows
+  - History rows
+  - Record versions
+  of: Account version
+  aggregation: count
+  expr: accounts_sk
+  additivity: additive
+  description: Total number of SCD2 version rows, indicating how frequently account
+    attributes change.
+  date_column: effective_from
+  dimensions:
+  - Type
+  - Industry
+  - BillingCountry
