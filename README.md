@@ -6,9 +6,9 @@ A runnable reference project for reporting, analytics and AI, powered by LakeLog
 
 Every new source adds engineering work. When teams build ingestion, transformation and quality checks differently, maintenance grows, governance drifts, and reports and AI applications inherit the gaps.
 
-**LakeLogic Core standardises ingestion, transformation, validation and materialisation through executable data contracts.** Schemas, ownership, quality rules and service levels live beside the processing, with agreed metrics and business concepts that people and AI agents read the same way.
+**LakeLogic Core standardises ingestion, transformation, validation and materialisation through executable data contracts.** Schemas, ownership, quality rules and service levels sit alongside processing definitions. Agreed metrics and business concepts give people and AI agents shared definitions to work from.
 
-RideFlow is a fictional ride-hailing business: seven domains, Bronze, Silver and Gold layers, CSV and JSON exports alongside PDFs, images and Word documents, run as batch pipelines and Spark Structured Streaming on **Unity Catalog, Delta Lake and Databricks Workflows**.
+RideFlow is a fictional ride-hailing business spanning seven domains and Bronze, Silver and Gold layers. It processes CSV, JSON, PDFs, images and Word documents through batch pipelines and Spark Structured Streaming, using Unity Catalog for governance, Delta Lake for storage and Databricks Workflows for orchestration.
 
 ## Architecture
 
