@@ -1,6 +1,6 @@
-# RideFlow: Data Platform Architecture on Databricks
+# RideFlow: A governed data mesh on Databricks
 
-**Build a decentralised Databricks lakehouse with shared governance**
+**Decentralised ownership, shared governance, one set of contracts.**
 
 A runnable reference project for reporting, analytics and AI, powered by LakeLogic and executable data contracts.
 
